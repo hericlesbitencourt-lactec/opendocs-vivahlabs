@@ -1,6 +1,6 @@
 openapi: 3.0.3
 info:
-  title: API VivaLabs
+  title: API VivaLabs Processamentos
   version: 1.0.0
   description: |
     Documentação das rotas de ações de processamentos (VivaLabs) de unificação de exames e fluxos de revisão IA.
@@ -8,7 +8,7 @@ paths:
   /exames/processamentos/{processamentoId}/alterar-arquivo:
     post:
       tags:
-        - Ações (Recuperação de Erro)
+        - Ações do processamento
       summary: Alterar arquivo PDF de processamento
       description: Permite reenviar um novo arquivo PDF para um processo de unificação que apresentou falha. **O status atual deve ser obrigatoriamente ERRO**.
       parameters:
@@ -69,7 +69,7 @@ paths:
   /exames/processamentos/{processamentoId}/tentar-novamente:
     post:
       tags:
-        - Ações (Recuperação de Erro)
+        - Ações do processamento
       summary: Tentar envio para a IA novamente
       description: Tenta reenviar o PDF para a IA novamente (válido apenas para processamentos que já possuem um arquivo, por exemplo, após falha na rota de alterar arquivo). **O status atual deve ser obrigatoriamente ERRO**.
       parameters:
@@ -119,7 +119,7 @@ paths:
   /exames/processamentos/{processamentoId}/cancelar:
     delete:
       tags:
-        - Ações (Recuperação de Erro)
+        - Ações do processamento
       summary: Cancelar processamento 
       description: Cancela um processamento de IA definitivamente. Exclui o grupo (`VivaLabsProcessamento`) atual e libera os pedidos de exames individualmente de volta para a fila pendente. **O status atual deve ser obrigatoriamente ERRO**.
       parameters:
@@ -138,7 +138,7 @@ paths:
                 processamentoId: "a1b2c3d4-e5f6-7a8b-9c0d-e1f2a3b4c5d6"
                 cancelado: true
         '400':
-          description: Somente processamentos com status de erro podem ser cancelados dessa forma.
+          description: Somente processamentos com status de erro podem ser cancelados.
           content:
             application/json:
               example:
