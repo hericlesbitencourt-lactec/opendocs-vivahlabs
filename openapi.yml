@@ -1,0 +1,255 @@
+openapi: 3.0.3
+info:
+  title: API VivaLabs
+  version: 1.0.0
+  description: |
+    Documentação das rotas de ações de processamentos (VivaLabs) de unificação de exames e fluxos de revisão IA.
+paths:
+  /exames/processamentos/{processamentoId}/alterar-arquivo:
+    post:
+      tags:
+        - Ações (Recuperação de Erro)
+      summary: Alterar arquivo PDF de processamento
+      description: Permite reenviar um novo arquivo PDF para um processo de unificação que apresentou falha. **O status atual deve ser obrigatoriamente ERRO**.
+      parameters:
+        - name: processamentoId
+          in: path
+          required: true
+          description: ID do processamento (vivaLabsProcessamentoId)
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: O novo arquivo PDF
+      responses:
+        '200':
+          description: Arquivo alterado e reenviado para a leitura na IA com sucesso. O status será transicionado para PROCESSANDO.
+          content:
+            application/json:
+              example:
+                processamentoId: "a1b2c3d4-e5f6-7a8b-9c0d-e1f2a3b4c5d6"
+                status: "PROCESSANDO"
+        '400':
+          description: Erro de regra de negócio (ex. status inválido).
+          content:
+            application/json:
+              example:
+                status: "error"
+                message: "Somente processamentos com erro podem ter arquivo alterado."
+        '404':
+          description: Processamento não encontrado para o usuário atual.
+          content:
+            application/json:
+              example:
+                status: "error"
+                message: "Processamento não encontrado."
+        '422':
+          description: Arquivo PDF inválido ou não fornecido.
+          content:
+            application/json:
+              example:
+                status: "error"
+                message: "Arquivo PDF é obrigatório para alterar o processamento."
+        '500':
+          description: Erro ao tentar comunicar com a rede da IA.
+          content:
+            application/json:
+              example:
+                status: "error"
+                message: "Erro ao comunicar com o serviço, tente novamente."
+  
+  /exames/processamentos/{processamentoId}/tentar-novamente:
+    post:
+      tags:
+        - Ações (Recuperação de Erro)
+      summary: Tentar envio para a IA novamente
+      description: Tenta reenviar o PDF para a IA novamente (válido apenas para processamentos que já possuem um arquivo, por exemplo, após falha na rota de alterar arquivo). **O status atual deve ser obrigatoriamente ERRO**.
+      parameters:
+        - name: processamentoId
+          in: path
+          required: true
+          description: ID do processamento
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Processamento reenviado para IA com sucesso.
+          content:
+            application/json:
+              example:
+                processamentoId: "a1b2c3d4-e5f6-7a8b-9c0d-e1f2a3b4c5d6"
+                status: "PROCESSANDO"
+        '400':
+          description: Somente processamentos com erro podem ser tentados novamente.
+          content:
+            application/json:
+              example:
+                status: "error"
+                message: "Somente processamentos com erro podem ser tentados novamente."
+        '404':
+          description: Processamento não encontrado.
+          content:
+            application/json:
+              example:
+                status: "error"
+                message: "Processamento não encontrado."
+        '422':
+          description: Processamento sem arquivo PDF armazenado.
+          content:
+            application/json:
+              example:
+                status: "error"
+                message: "Processamento sem arquivo PDF. Utilize a opção de alterar arquivo."
+        '500':
+          description: Erro de comunicação com a rede da IA.
+          content:
+            application/json:
+              example:
+                status: "error"
+                message: "Erro ao comunicar com o serviço, tente novamente."
+  
+  /exames/processamentos/{processamentoId}/cancelar:
+    delete:
+      tags:
+        - Ações (Recuperação de Erro)
+      summary: Cancelar processamento 
+      description: Cancela um processamento de IA definitivamente. Exclui o grupo (`VivaLabsProcessamento`) atual e libera os pedidos de exames individualmente de volta para a fila pendente. **O status atual deve ser obrigatoriamente ERRO**.
+      parameters:
+        - name: processamentoId
+          in: path
+          required: true
+          description: ID do processamento
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Processamento cancelado e exames desvinculados com sucesso.
+          content:
+            application/json:
+              example:
+                processamentoId: "a1b2c3d4-e5f6-7a8b-9c0d-e1f2a3b4c5d6"
+                cancelado: true
+        '400':
+          description: Somente processamentos com status de erro podem ser cancelados dessa forma.
+          content:
+            application/json:
+              example:
+                status: "error"
+                message: "Somente processamentos com erro podem ser cancelados."
+        '404':
+          description: Processamento não encontrado.
+          content:
+            application/json:
+              example:
+                status: "error"
+                message: "Processamento não encontrado."
+  
+  # /exames/processamentos/{processamentoId}/revisao:
+  #   get:
+  #     tags:
+  #       - Revisão IA
+  #     summary: Buscar dados pendentes para revisão
+  #     description: Retorna os parâmetros extraídos pela IA para a tela de revisão e auditoria do usuário (Status deve ser AGUARDANDO_REVISAO).
+  #     parameters:
+  #       - name: processamentoId
+  #         in: path
+  #         required: true
+  #         description: ID do processamento
+  #         schema:
+  #           type: string
+  #     responses:
+  #       '200':
+  #         description: Detalhes carregados com sucesso.
+  #         content:
+  #           application/json:
+  #             example:
+  #               id: "3e32642d-5c3c-45a8-b834-e8e4cb312609"
+  #               status: "AGUARDANDO_REVISAO"
+  #               arquivoPdf: "https://bucket-name.s3.amazonaws.com/viva-labs/exames/..."
+  #               dataRealizacao: "2023-11-20T10:00:00.000Z"
+  #               laboratorioDetectado: "Laboratório Modelo"
+  #               mensagemErro: null
+  #               paciente:
+  #                 nome: "Paciente Exemplo"
+  #                 cpf: "12345678900"
+  #                 nascimento: "1990-01-01T00:00:00.000Z"
+  #               itens:
+  #                 - id: "item-exame-123"
+  #                   nomeCustomizado: "Hemograma Completo"
+  #                   catalogoExame:
+  #                     descricao: "Hemograma Completo"
+  #                     tipo: "LABORATORIAL"
+  #                     suportaInterpretacaoPorIA: true
+  #                   resultados:
+  #                     - id: "resultado-123"
+  #                       resultadoNumerico: 15.4
+  #                       resultadoTexto: "15.4"
+  #                       parametro:
+  #                         descricao: "Hemoglobina"
+  #                         unidadeMedida: "g/dL"
+  #                       referenciasDetectadas:
+  #                         - valorMinimo: 13.5
+  #                           valorMaximo: 17.5
+  #       '404':
+  #         description: Processamento não encontrado.
+  #         content:
+  #           application/json:
+  #             example:
+  #               status: "error"
+  #               message: "Processamento não encontrado."
+                                  
+  # /exames/processamentos/{processamentoId}/finalizar-revisao:
+  #   patch:
+  #     tags:
+  #       - Revisão IA
+  #     summary: Finalizar edição/revisão
+  #     description: Envia os resultados manuais ou os que foram corrigidos sobre a extração da IA e altera o status para CONCLUIDO.
+  #     parameters:
+  #       - name: processamentoId
+  #         in: path
+  #         required: true
+  #         schema:
+  #           type: string
+  #     requestBody:
+  #       required: true
+  #       content:
+  #         application/json:
+  #           example:
+  #             exames:
+  #               - id: "item-exame-123"
+  #                 observacao: "Tudo normal"
+  #                 resultados:
+  #                   - id: "resultado-123"
+  #                     valor: "15.4"
+  #                     referenciaMin: "13.5"
+  #                     referenciaMax: "17.5"
+  #     responses:
+  #       '200':
+  #         description: Resultados persistidos e validados pela operação com sucesso (CONCLUIDO).
+  #         content:
+  #           application/json:
+  #             example:
+  #               processamentoId: "a1b2c3d4-e5f6-7a8b-9c0d-e1f2a3b4c5d6"
+  #               status: "CONCLUIDO"
+  #       '400':
+  #         description: O processamento precisa estar como aguardando revisão.
+  #         content:
+  #           application/json:
+  #             example:
+  #               status: "error"
+  #               message: "O processamento precisa estar aguardando revisão para ser finalizado."
+  #       '404':
+  #         description: Processamento não foi encontrado.
+  #         content:
+  #           application/json:
+  #             example:
+  #               status: "error"
+  #               message: "Processamento não encontrado."
