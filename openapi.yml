@@ -42,29 +42,45 @@ paths:
           content:
             application/json:
               example:
-                status: "error"
-                message: "Somente processamentos com erro podem ter arquivo alterado."
+                error:
+                  message: "Somente processamentos com erro podem ter arquivo alterado."
+                  status: 400
+                  timestamp: "2023-11-20T10:00:00.000Z"
+                  path: "/exames/processamentos/id/alterar-arquivo"
+                  method: "POST"
         '404':
           description: Processamento não encontrado para o usuário atual.
           content:
             application/json:
               example:
-                status: "error"
-                message: "Processamento não encontrado."
+                error:
+                  message: "Processamento não encontrado."
+                  status: 404
+                  timestamp: "2023-11-20T10:00:00.000Z"
+                  path: "/exames/processamentos/id/alterar-arquivo"
+                  method: "POST"
         '422':
           description: Arquivo PDF inválido ou não fornecido.
           content:
             application/json:
               example:
-                status: "error"
-                message: "Arquivo PDF é obrigatório para alterar o processamento."
+                error:
+                  message: "Arquivo PDF é obrigatório para alterar o processamento."
+                  status: 422
+                  timestamp: "2023-11-20T10:00:00.000Z"
+                  path: "/exames/processamentos/id/alterar-arquivo"
+                  method: "POST"
         '500':
           description: Erro ao tentar comunicar com a rede da IA.
           content:
             application/json:
               example:
-                status: "error"
-                message: "Erro ao comunicar com o serviço, tente novamente."
+                error:
+                  message: "Erro ao comunicar com o serviço, tente novamente."
+                  status: 500
+                  timestamp: "2023-11-20T10:00:00.000Z"
+                  path: "/exames/processamentos/id/alterar-arquivo"
+                  method: "POST"
   
   /exames/processamentos/{processamentoId}/tentar-novamente:
     post:
@@ -92,29 +108,45 @@ paths:
           content:
             application/json:
               example:
-                status: "error"
-                message: "Somente processamentos com erro podem ser tentados novamente."
+                error:
+                  message: "Somente processamentos com erro podem ser tentados novamente."
+                  status: 400
+                  timestamp: "2023-11-20T10:00:00.000Z"
+                  path: "/exames/processamentos/id/tentar-novamente"
+                  method: "POST"
         '404':
           description: Processamento não encontrado.
           content:
             application/json:
               example:
-                status: "error"
-                message: "Processamento não encontrado."
+                error:
+                  message: "Processamento não encontrado."
+                  status: 404
+                  timestamp: "2023-11-20T10:00:00.000Z"
+                  path: "/exames/processamentos/id/tentar-novamente"
+                  method: "POST"
         '422':
           description: Processamento sem arquivo PDF armazenado.
           content:
             application/json:
               example:
-                status: "error"
-                message: "Processamento sem arquivo PDF. Utilize a opção de alterar arquivo."
+                error:
+                  message: "Processamento sem arquivo PDF. Utilize a opção de alterar arquivo."
+                  status: 422
+                  timestamp: "2023-11-20T10:00:00.000Z"
+                  path: "/exames/processamentos/id/tentar-novamente"
+                  method: "POST"
         '500':
           description: Erro de comunicação com a rede da IA.
           content:
             application/json:
               example:
-                status: "error"
-                message: "Erro ao comunicar com o serviço, tente novamente."
+                error:
+                  message: "Erro ao comunicar com o serviço, tente novamente."
+                  status: 500
+                  timestamp: "2023-11-20T10:00:00.000Z"
+                  path: "/exames/processamentos/id/tentar-novamente"
+                  method: "POST"
   
   /exames/processamentos/{processamentoId}/cancelar:
     delete:
@@ -142,15 +174,23 @@ paths:
           content:
             application/json:
               example:
-                status: "error"
-                message: "Somente processamentos com erro podem ser cancelados."
+                error:
+                  message: "Somente processamentos com erro podem ser cancelados."
+                  status: 400
+                  timestamp: "2023-11-20T10:00:00.000Z"
+                  path: "/exames/processamentos/id/cancelar"
+                  method: "DELETE"
         '404':
           description: Processamento não encontrado.
           content:
             application/json:
               example:
-                status: "error"
-                message: "Processamento não encontrado."
+                error:
+                  message: "Processamento não encontrado."
+                  status: 404
+                  timestamp: "2023-11-20T10:00:00.000Z"
+                  path: "/exames/processamentos/id/cancelar"
+                  method: "DELETE"
   
   # /exames/processamentos/{processamentoId}/revisao:
   #   get:
@@ -203,8 +243,12 @@ paths:
   #         content:
   #           application/json:
   #             example:
-  #               status: "error"
-  #               message: "Processamento não encontrado."
+  #               error:
+  #                 message: "Processamento não encontrado."
+  #                 status: 404
+  #                 timestamp: "2023-11-20T10:00:00.000Z"
+  #                 path: "/exames/processamentos/id/revisao"
+  #                 method: "GET"
                                   
   # /exames/processamentos/{processamentoId}/finalizar-revisao:
   #   patch:
@@ -244,12 +288,20 @@ paths:
   #         content:
   #           application/json:
   #             example:
-  #               status: "error"
-  #               message: "O processamento precisa estar aguardando revisão para ser finalizado."
+  #               error:
+  #                 message: "O processamento precisa estar aguardando revisão para ser finalizado."
+  #                 status: 400
+  #                 timestamp: "2023-11-20T10:00:00.000Z"
+  #                 path: "/exames/processamentos/id/finalizar-revisao"
+  #                 method: "PATCH"
   #       '404':
   #         description: Processamento não foi encontrado.
   #         content:
   #           application/json:
   #             example:
-  #               status: "error"
-  #               message: "Processamento não encontrado."
+  #               error:
+  #                 message: "Processamento não encontrado."
+  #                 status: 404
+  #                 timestamp: "2023-11-20T10:00:00.000Z"
+  #                 path: "/exames/processamentos/id/finalizar-revisao"
+  #                 method: "PATCH"
