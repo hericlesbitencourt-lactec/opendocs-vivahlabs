@@ -60,7 +60,10 @@ paths:
                   path: "/exames/processamentos/id/alterar-arquivo"
                   method: "POST"
         '422':
-          description: Arquivo PDF inválido ou não fornecido.
+          description: |
+            Arquivo não enviado ou inválido. Pode retornar duas mensagens distintas:
+            - `"Arquivo PDF é obrigatório para alterar o processamento."` — nenhum arquivo foi enviado no form-data.
+            - `"Arquivo PDF inválido ou vazio."` — arquivo enviado está vazio ou corrompido.
           content:
             application/json:
               example:
@@ -70,14 +73,14 @@ paths:
                   timestamp: "2023-11-20T10:00:00.000Z"
                   path: "/exames/processamentos/id/alterar-arquivo"
                   method: "POST"
-        '500':
-          description: Erro ao tentar comunicar com a rede da IA.
+        '503':
+          description: Não foi possível comunicar com o serviço de IA.
           content:
             application/json:
               example:
                 error:
-                  message: "Erro ao comunicar com o serviço, tente novamente."
-                  status: 500
+                  message: "Não foi possível processar este exame no momento. Tente novamente mais tarde."
+                  status: 503
                   timestamp: "2023-11-20T10:00:00.000Z"
                   path: "/exames/processamentos/id/alterar-arquivo"
                   method: "POST"
@@ -131,19 +134,19 @@ paths:
             application/json:
               example:
                 error:
-                  message: "Processamento sem arquivo PDF. Utilize a opção de alterar arquivo."
+                  message: "Este processamento precisa de um novo PDF para continuar."
                   status: 422
                   timestamp: "2023-11-20T10:00:00.000Z"
                   path: "/exames/processamentos/id/tentar-novamente"
                   method: "POST"
-        '500':
-          description: Erro de comunicação com a rede da IA.
+        '503':
+          description: Não foi possível comunicar com o serviço de IA.
           content:
             application/json:
               example:
                 error:
-                  message: "Erro ao comunicar com o serviço, tente novamente."
-                  status: 500
+                  message: "Não foi possível processar este exame no momento. Tente novamente mais tarde."
+                  status: 503
                   timestamp: "2023-11-20T10:00:00.000Z"
                   path: "/exames/processamentos/id/tentar-novamente"
                   method: "POST"
@@ -153,7 +156,7 @@ paths:
       tags:
         - Ações do processamento
       summary: Cancelar processamento 
-      description: Cancela um processamento de IA definitivamente. Exclui o grupo (`VivaLabsProcessamento`) atual e libera os pedidos de exames individualmente de volta para a fila pendente. **O status atual deve ser obrigatoriamente ERRO**.
+      description: Cancela um processamento de IA definitivamente. Exclui o processamento atual, apaga os dados extraídos pela IA e libera os pedidos de exames individualmente de volta para a fila pendente. O status atual deve ser `ERRO` ou `AGUARDANDO_REVISAO`.
       parameters:
         - name: processamentoId
           in: path
@@ -170,12 +173,12 @@ paths:
                 processamentoId: "a1b2c3d4-e5f6-7a8b-9c0d-e1f2a3b4c5d6"
                 cancelado: true
         '400':
-          description: Somente processamentos com status de erro podem ser cancelados.
+          description: O processamento precisa estar com erro ou aguardando revisão.
           content:
             application/json:
               example:
                 error:
-                  message: "Somente processamentos com erro podem ser cancelados."
+                  message: "Somente processamentos com erro ou aguardando revisão podem ser cancelados."
                   status: 400
                   timestamp: "2023-11-20T10:00:00.000Z"
                   path: "/exames/processamentos/id/cancelar"
@@ -192,116 +195,163 @@ paths:
                   path: "/exames/processamentos/id/cancelar"
                   method: "DELETE"
   
-  # /exames/processamentos/{processamentoId}/revisao:
-  #   get:
-  #     tags:
-  #       - Revisão IA
-  #     summary: Buscar dados pendentes para revisão
-  #     description: Retorna os parâmetros extraídos pela IA para a tela de revisão e auditoria do usuário (Status deve ser AGUARDANDO_REVISAO).
-  #     parameters:
-  #       - name: processamentoId
-  #         in: path
-  #         required: true
-  #         description: ID do processamento
-  #         schema:
-  #           type: string
-  #     responses:
-  #       '200':
-  #         description: Detalhes carregados com sucesso.
-  #         content:
-  #           application/json:
-  #             example:
-  #               id: "3e32642d-5c3c-45a8-b834-e8e4cb312609"
-  #               status: "AGUARDANDO_REVISAO"
-  #               arquivoPdf: "https://bucket-name.s3.amazonaws.com/viva-labs/exames/..."
-  #               dataRealizacao: "2023-11-20T10:00:00.000Z"
-  #               laboratorioDetectado: "Laboratório Modelo"
-  #               mensagemErro: null
-  #               paciente:
-  #                 nome: "Paciente Exemplo"
-  #                 cpf: "12345678900"
-  #                 nascimento: "1990-01-01T00:00:00.000Z"
-  #               itens:
-  #                 - id: "item-exame-123"
-  #                   nomeCustomizado: "Hemograma Completo"
-  #                   catalogoExame:
-  #                     descricao: "Hemograma Completo"
-  #                     tipo: "LABORATORIAL"
-  #                     suportaInterpretacaoPorIA: true
-  #                   resultados:
-  #                     - id: "resultado-123"
-  #                       resultadoNumerico: 15.4
-  #                       resultadoTexto: "15.4"
-  #                       parametro:
-  #                         descricao: "Hemoglobina"
-  #                         unidadeMedida: "g/dL"
-  #                       referenciasDetectadas:
-  #                         - valorMinimo: 13.5
-  #                           valorMaximo: 17.5
-  #       '404':
-  #         description: Processamento não encontrado.
-  #         content:
-  #           application/json:
-  #             example:
-  #               error:
-  #                 message: "Processamento não encontrado."
-  #                 status: 404
-  #                 timestamp: "2023-11-20T10:00:00.000Z"
-  #                 path: "/exames/processamentos/id/revisao"
-  #                 method: "GET"
-                                  
-  # /exames/processamentos/{processamentoId}/finalizar-revisao:
-  #   patch:
-  #     tags:
-  #       - Revisão IA
-  #     summary: Finalizar edição/revisão
-  #     description: Envia os resultados manuais ou os que foram corrigidos sobre a extração da IA e altera o status para CONCLUIDO.
-  #     parameters:
-  #       - name: processamentoId
-  #         in: path
-  #         required: true
-  #         schema:
-  #           type: string
-  #     requestBody:
-  #       required: true
-  #       content:
-  #         application/json:
-  #           example:
-  #             exames:
-  #               - id: "item-exame-123"
-  #                 observacao: "Tudo normal"
-  #                 resultados:
-  #                   - id: "resultado-123"
-  #                     valor: "15.4"
-  #                     referenciaMin: "13.5"
-  #                     referenciaMax: "17.5"
-  #     responses:
-  #       '200':
-  #         description: Resultados persistidos e validados pela operação com sucesso (CONCLUIDO).
-  #         content:
-  #           application/json:
-  #             example:
-  #               processamentoId: "a1b2c3d4-e5f6-7a8b-9c0d-e1f2a3b4c5d6"
-  #               status: "CONCLUIDO"
-  #       '400':
-  #         description: O processamento precisa estar como aguardando revisão.
-  #         content:
-  #           application/json:
-  #             example:
-  #               error:
-  #                 message: "O processamento precisa estar aguardando revisão para ser finalizado."
-  #                 status: 400
-  #                 timestamp: "2023-11-20T10:00:00.000Z"
-  #                 path: "/exames/processamentos/id/finalizar-revisao"
-  #                 method: "PATCH"
-  #       '404':
-  #         description: Processamento não foi encontrado.
-  #         content:
-  #           application/json:
-  #             example:
-  #               error:
-  #                 message: "Processamento não encontrado."
-  #                 status: 404
-  #                 timestamp: "2023-11-20T10:00:00.000Z"
-  #                 path: "/exames/processamentos/id/finalizar-revisao"
-  #                 method: "PATCH"
+  /exames/processamentos/{processamentoId}/revisao:
+    get:
+      tags:
+        - Revisão IA
+      summary: Buscar dados pendentes para revisão
+      description: Retorna os parâmetros extraídos pela IA para a tela de revisão e auditoria do usuário. O status deve ser `AGUARDANDO_REVISAO`. Cada exame da revisão expõe no máximo um `resultado`. Quando o resultado for numérico, `resultadoNumerico` vem preenchido e `resultadoTexto` vem `null`. Quando o resultado for textual, como "reagente" ou "não reagente", `resultadoTexto` vem preenchido e `resultadoNumerico` vem `null`. A `observacao` retornada neste payload pertence ao `VivaLabsProcessamento` inteiro, não a cada exame individual.
+      parameters:
+        - name: processamentoId
+          in: path
+          required: true
+          description: ID do processamento
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Detalhes carregados com sucesso.
+          content:
+            application/json:
+              example:
+                id: "3e32642d-5c3c-45a8-b834-e8e4cb312609"
+                status: "AGUARDANDO_REVISAO"
+                arquivoPdfUrl: "https://bucket-name.s3.amazonaws.com/viva-labs/exames/..."
+                dataRealizacao: "2023-11-20T10:00:00.000Z"
+                laboratorioDetectado: "Laboratório Modelo"
+                mensagemErro: null
+                observacao: "Observação geral do processamento."
+                paciente:
+                  nome: "Paciente Exemplo"
+                  cpf: "12345678900"
+                  nascimento: "1990-01-01T00:00:00.000Z"
+                exames:
+                  - id: "item-exame-123"
+                    nome: "Hemograma Completo"
+                    tipo: "LABORATORIAL"
+                    leituraIaHabilitada: true
+                    resultado:
+                      id: "resultado-123"
+                      descricao: "Hemoglobina"
+                      unidadeMedida: "g/dL"
+                      unidadeMedidaPadrao: "g/dL"
+                      unidadeMedidaPDF: "g/L"
+                      divergenciaUnidade: true
+                      valor: "15.4"
+                      resultadoNumerico: 15.4
+                      resultadoTexto: null
+                      referenciaMin: "13.5"
+                      referenciaMax: "17.5"
+                      referenciaTexto: null
+                      valorReferenciaPDF: "{\"min\":\"13.5\",\"max\":\"17.5\",\"value\":null,\"sex\":\"male\",\"age_min\":18,\"age_max\":59}"
+                  - id: "item-exame-456"
+                    nome: "HIV"
+                    tipo: "LABORATORIAL"
+                    leituraIaHabilitada: true
+                    resultado:
+                      id: "resultado-124"
+                      descricao: "HIV"
+                      unidadeMedida: null
+                      unidadeMedidaPadrao: null
+                      unidadeMedidaPDF: null
+                      divergenciaUnidade: false
+                      valor: "não reagente"
+                      resultadoNumerico: null
+                      resultadoTexto: "não reagente"
+                      referenciaMin: null
+                      referenciaMax: null
+                      referenciaTexto: "não reagente"
+                      valorReferenciaPDF: "{\"min\":null,\"max\":null,\"value\":\"não reagente\",\"sex\":null,\"age_min\":null,\"age_max\":null}"
+        '400':
+          description: O processamento não está aguardando revisão.
+          content:
+            application/json:
+              example:
+                error:
+                  message: "Processamento não está aguardando revisão."
+                  status: 400
+                  timestamp: "2023-11-20T10:00:00.000Z"
+                  path: "/exames/processamentos/id/revisao"
+                  method: "GET"
+        '404':
+          description: Processamento não encontrado.
+          content:
+            application/json:
+              example:
+                error:
+                  message: "Processamento não encontrado."
+                  status: 404
+                  timestamp: "2023-11-20T10:00:00.000Z"
+                  path: "/exames/processamentos/id/revisao"
+                  method: "GET"
+
+  /exames/processamentos/{processamentoId}/finalizar-revisao:
+    post:
+      tags:
+        - Revisão IA
+      summary: Finalizar edição/revisão
+      description: Finaliza a revisão de um único `VivaLabsProcessamento`, identificado pelo `processamentoId` da rota. O body pode conter vários exames, mas todos devem pertencer a esse mesmo processamento. Cada exame aceita no máximo um `resultado` editável. A `observacao`, quando informada, é geral do `VivaLabsProcessamento` e fica fora da lista de `exames`.
+      parameters:
+        - name: processamentoId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            example:
+              observacao: "Processamento revisado manualmente antes da conclusão."
+              exames:
+                - id: "b098c0d6-22f8-4bab-84c1-510e920d4df7"
+                  resultado:
+                    id: "3dbac066-e018-4fd5-bcbc-38d1aec23f35"
+                    valor: "15.22"
+                    referenciaMin: "13.5"
+                    referenciaMax: "17.5"
+                    referenciaTexto: null
+                - id: "7b66b34f-72c3-4573-8e89-0bf2a155ac17"
+                  resultado:
+                    id: "a669011d-3137-49bc-a81d-73e27d4f1d72"
+                    valor: "42.73"
+                    referenciaMin: "41"
+                    referenciaMax: "53"
+                    referenciaTexto: null
+                - id: "66b9c0b7-e59d-4d68-b0f0-9e18918ff220"
+                  resultado:
+                    id: "caa2d0d2-f02f-49be-b461-0d0c24476c5f"
+                    valor: "87"
+                    referenciaMin: "80"
+                    referenciaMax: "100"
+                    referenciaTexto: null
+      responses:
+        '200':
+          description: Resultados persistidos e validados pela operação com sucesso.
+          content:
+            application/json:
+              example:
+                processamentoId: "a1b2c3d4-e5f6-7a8b-9c0d-e1f2a3b4c5d6"
+                status: "CONCLUIDO"
+        '400':
+          description: O processamento precisa estar como aguardando revisão.
+          content:
+            application/json:
+              example:
+                error:
+                  message: "Somente processamentos aguardando revisão podem ser finalizados."
+                  status: 400
+                  timestamp: "2023-11-20T10:00:00.000Z"
+                  path: "/exames/processamentos/id/finalizar-revisao"
+                  method: "POST"
+        '404':
+          description: Processamento não foi encontrado.
+          content:
+            application/json:
+              example:
+                error:
+                  message: "Processamento não encontrado."
+                  status: 404
+                  timestamp: "2023-11-20T10:00:00.000Z"
+                  path: "/exames/processamentos/id/finalizar-revisao"
+                  method: "POST"
