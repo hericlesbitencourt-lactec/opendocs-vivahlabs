@@ -1,6 +1,6 @@
 openapi: 3.0.3
 info:
-  title: API VivaLabs Processamentos
+  title: API VivaLabs
   version: 1.0.0
   description: |
     Documentação das rotas de ações de processamentos (VivaLabs) de unificação de exames e fluxos de revisão IA.
