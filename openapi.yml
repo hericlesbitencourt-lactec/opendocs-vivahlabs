@@ -74,7 +74,7 @@ paths:
                   path: "/exames/processamentos/id/alterar-arquivo"
                   method: "POST"
         '503':
-          description: Não foi possível comunicar com o serviço de IA.
+          description: O serviço de IA recusou ou encerrou a conexão.
           content:
             application/json:
               example:
@@ -84,7 +84,18 @@ paths:
                   timestamp: "2023-11-20T10:00:00.000Z"
                   path: "/exames/processamentos/id/alterar-arquivo"
                   method: "POST"
-  
+        '504':
+          description: O serviço de IA não respondeu dentro do tempo limite.
+          content:
+            application/json:
+              example:
+                error:
+                  message: "Não foi possível processar este exame no momento. Tente novamente mais tarde."
+                  status: 504
+                  timestamp: "2023-11-20T10:00:00.000Z"
+                  path: "/exames/processamentos/id/alterar-arquivo"
+                  method: "POST"
+
   /exames/processamentos/{processamentoId}/tentar-novamente:
     post:
       tags:
@@ -140,7 +151,7 @@ paths:
                   path: "/exames/processamentos/id/tentar-novamente"
                   method: "POST"
         '503':
-          description: Não foi possível comunicar com o serviço de IA.
+          description: O serviço de IA recusou ou encerrou a conexão.
           content:
             application/json:
               example:
@@ -150,7 +161,18 @@ paths:
                   timestamp: "2023-11-20T10:00:00.000Z"
                   path: "/exames/processamentos/id/tentar-novamente"
                   method: "POST"
-  
+        '504':
+          description: O serviço de IA não respondeu dentro do tempo limite.
+          content:
+            application/json:
+              example:
+                error:
+                  message: "Não foi possível processar este exame no momento. Tente novamente mais tarde."
+                  status: 504
+                  timestamp: "2023-11-20T10:00:00.000Z"
+                  path: "/exames/processamentos/id/tentar-novamente"
+                  method: "POST"
+
   /exames/processamentos/{processamentoId}/cancelar:
     delete:
       tags:
@@ -194,13 +216,169 @@ paths:
                   timestamp: "2023-11-20T10:00:00.000Z"
                   path: "/exames/processamentos/id/cancelar"
                   method: "DELETE"
+
+  /exames/processamentos/anexos:
+    post:
+      tags:
+        - Ações do processamento
+      summary: Enviar PDFs de exames para análise pela IA
+      description: |
+        Recebe os arquivos PDF dos exames do paciente e os envia para leitura e análise automática pela inteligência artificial.
+
+        Para cada arquivo enviado, o sistema verifica se já existe um processamento em andamento para aquele exame e o reaproveita quando possível. Caso contrário, um novo processamento é criado automaticamente.
+
+        A requisição deve ser enviada no formato `multipart/form-data`, com os campos organizados assim:
+        - `pacienteId` — ID do paciente
+        - `anexos[0][exameId]` ou `anexos[0][grupoId]` ou `anexos[0][avulso]` — identifica a qual exame o arquivo pertence
+        - `anexos[0][tipoAvulso]`, `anexos[0][nomeExame]`, `anexos[0][arquivo]` — detalhes do arquivo
+        - `anexos[1][...]` e assim por diante, para múltiplos arquivos
+
+        **Como preencher cada arquivo (anexo):**
+        - **Exame avulso** (não vinculado a nenhum pedido): enviar `avulso: "true"`, `tipoAvulso`, `nomeExame` e `arquivo`.
+        - **Vinculado a um pedido de exame**: enviar `exameId` e `arquivo`.
+        - **Vinculado a um grupo de unificação já existente**: enviar `grupoId` e `arquivo`.
+        - Para exames não avulsos, é obrigatório informar exatamente um destino: `exameId` ou `grupoId` (não os dois).
+        - O campo `nomeExame` é opcional para exames não avulsos e pode ser usado para alterar o nome salvo no processamento.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - pacienteId
+                - anexos
+              properties:
+                pacienteId:
+                  type: string
+                  format: uuid
+                anexos:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: object
+                    properties:
+                      exameId:
+                        type: string
+                        format: uuid
+                        description: ID do pedido de exame ao qual o PDF será vinculado.
+                      grupoId:
+                        type: string
+                        format: uuid
+                        description: ID do grupo de unificação ao qual o PDF será vinculado, quando o exame já foi agrupado anteriormente.
+                      avulso:
+                        type: string
+                        enum:
+                          - 'true'
+                          - 'false'
+                      tipoAvulso:
+                        type: string
+                        enum:
+                          - IMAGEM
+                          - LABORATORIAL
+                          - OUTROS
+                      nomeExame:
+                        type: string
+                      arquivo:
+                        type: string
+                        format: binary
+            examples:
+              exameExistente:
+                summary: Anexo vinculado a um exame existente
+                value:
+                  pacienteId: "9b2d29b6-c8df-4f8b-8b84-c2b51fb1fd5d"
+                  anexos:
+                    - exameId: "b098c0d6-22f8-4bab-84c1-510e920d4df7"
+                      nomeExame: "Hemograma Completo"
+                      arquivo: "(binary)"
+              avulso:
+                summary: Anexo avulso
+                value:
+                  pacienteId: "9b2d29b6-c8df-4f8b-8b84-c2b51fb1fd5d"
+                  anexos:
+                    - avulso: "true"
+                      tipoAvulso: "LABORATORIAL"
+                      nomeExame: "Vitamina D"
+                      arquivo: "(binary)"
+      responses:
+        '202':
+          description: Arquivos recebidos com sucesso. Cada item pode ter sido enviado para análise da IA normalmente ou registrado como falha individual — verifique os campos `processamentosEnviados` e `processamentosComFalha` na resposta.
+          content:
+            application/json:
+              example:
+                processamentosEnviados:
+                  - processamentoId: "a1b2c3d4-e5f6-7a8b-9c0d-e1f2a3b4c5d6"
+                    status: "PROCESSANDO"
+                processamentosComFalha:
+                  - processamentoId: "f6c1847b-fca9-4f4f-bfe9-919f86dd15f6"
+                    motivo: "Não foi possível processar este exame no momento. Tente novamente mais tarde."
+        '400':
+          description: |
+            Dados inválidos ou regra de negócio não atendida. Exemplos de mensagens retornadas:
+            - `"Exame {id} está associado a múltiplos processamentos. Selecione o grupo explicitamente para anexar o PDF."` — ocorre quando o exame pertence a mais de um grupo e o sistema não sabe a qual enviar.
+            - `"Cada anexo deve ser avulso (com tipoAvulso) ou informar exatamente um alvo (exameId ou grupoId)."` — o item não foi identificado corretamente.
+            - `"Nome do exame é obrigatório para exames avulsos."` — faltou informar o nome do exame avulso.
+          content:
+            application/json:
+              example:
+                error:
+                  message: "Cada anexo deve ser avulso (com tipoAvulso) ou informar exatamente um alvo (exameId ou grupoId)."
+                  status: 400
+                  timestamp: "2023-11-20T10:00:00.000Z"
+                  path: "/exames/processamentos/anexos"
+                  method: "POST"
+        '404':
+          description: |
+            Paciente, exame ou grupo não encontrado. Exemplos de mensagens retornadas:
+            - `"Paciente não encontrado."` — o `pacienteId` informado não existe no sistema.
+            - `"Grupo de unificação {id} não encontrado para o paciente."` — o grupo informado não pertence a esse paciente.
+            - `"Exame {id} não encontrado para o paciente."` — o pedido de exame informado não pertence a esse paciente.
+          content:
+            application/json:
+              example:
+                error:
+                  message: "Paciente não encontrado."
+                  status: 404
+                  timestamp: "2023-11-20T10:00:00.000Z"
+                  path: "/exames/processamentos/anexos"
+                  method: "POST"
+        '422':
+          description: |
+            Arquivo ausente ou em formato inválido. Exemplos de mensagens retornadas:
+            - `"Arquivo do anexo 0 ('anexos[0][arquivo]') não foi enviado na requisição."` — o campo `arquivo` de um dos itens está faltando.
+            - `"Apenas arquivos PDF são permitidos!"` — foi enviado um arquivo que não é PDF.
+          content:
+            application/json:
+              example:
+                error:
+                  message: "Arquivo do anexo 0 ('anexos[0][arquivo]') não foi enviado na requisição."
+                  status: 422
+                  timestamp: "2023-11-20T10:00:00.000Z"
+                  path: "/exames/processamentos/anexos"
+                  method: "POST"
   
   /exames/processamentos/{processamentoId}/revisao:
     get:
       tags:
         - Revisão IA
-      summary: Buscar dados pendentes para revisão
-      description: Retorna os parâmetros extraídos pela IA para a tela de revisão e auditoria do usuário. O status deve ser `AGUARDANDO_REVISAO`. Cada exame da revisão expõe no máximo um `resultado`. Quando o resultado for numérico, `resultadoNumerico` vem preenchido e `resultadoTexto` vem `null`. Quando o resultado for textual, como "reagente" ou "não reagente", `resultadoTexto` vem preenchido e `resultadoNumerico` vem `null`. A `observacao` retornada neste payload pertence ao `VivaLabsProcessamento` inteiro, não a cada exame individual.
+      summary: Carregar dados do processamento para revisão humana
+      description: |
+        Retorna os dados do processamento prontos para revisão humana, já organizados para consumo da tela.
+
+        A IA fornece principalmente:
+        - `exam_date`, que é refletido em `dataRealizacao`
+        - `laboratory_name`, que é refletido em `laboratorioDetectado`
+        - os resultados extraídos por exame/campo/valor, que são convertidos pelo backend em `resultados`, `inputResultado` e `InputsValoresRefencia`
+
+        O agrupamento final em `gruposExames`, `subGrupos` e `examesSemSubgrupos` é montado pelo backend com base no catálogo de exames e nos resultados persistidos do processamento.
+
+        **Estrutura do retorno:**
+        - `gruposExames`: lista de grupos de exames do processamento
+        - `subGrupos`: subdivisão opcional dentro de cada grupo
+        - `examesSemSubgrupos`: exames do grupo que não pertencem a um subgrupo
+        - `resultados`: lista de resultados extraídos para cada exame
+        - `inputResultado.tipo`: pode ser `numerico` ou `texto`
+        - `InputsValoresRefencia`: referências extraídas pela IA, preservando o tipo e o rótulo exibido na revisão
       parameters:
         - name: processamentoId
           in: path
@@ -210,60 +388,280 @@ paths:
             type: string
       responses:
         '200':
-          description: Detalhes carregados com sucesso.
+          description: Payload de revisão retornado com os dados organizados para a interface de revisão.
           content:
             application/json:
-              example:
-                id: "3e32642d-5c3c-45a8-b834-e8e4cb312609"
-                status: "AGUARDANDO_REVISAO"
-                arquivoPdfUrl: "https://bucket-name.s3.amazonaws.com/viva-labs/exames/..."
-                dataRealizacao: "2023-11-20T10:00:00.000Z"
-                laboratorioDetectado: "Laboratório Modelo"
-                mensagemErro: null
-                observacao: "Observação geral do processamento."
-                paciente:
-                  nome: "Paciente Exemplo"
-                  cpf: "12345678900"
-                  nascimento: "1990-01-01T00:00:00.000Z"
-                exames:
-                  - id: "item-exame-123"
-                    nome: "Hemograma Completo"
-                    tipo: "LABORATORIAL"
-                    leituraIaHabilitada: true
-                    resultado:
-                      id: "resultado-123"
-                      descricao: "Hemoglobina"
-                      unidadeMedida: "g/dL"
-                      unidadeMedidaPadrao: "g/dL"
-                      unidadeMedidaPDF: "g/L"
-                      divergenciaUnidade: true
-                      valor: "15.4"
-                      resultadoNumerico: 15.4
-                      resultadoTexto: null
-                      referenciaMin: "13.5"
-                      referenciaMax: "17.5"
-                      referenciaTexto: null
-                      valorReferenciaPDF: "{\"min\":\"13.5\",\"max\":\"17.5\",\"value\":null,\"sex\":\"male\",\"age_min\":18,\"age_max\":59}"
-                  - id: "item-exame-456"
-                    nome: "HIV"
-                    tipo: "LABORATORIAL"
-                    leituraIaHabilitada: true
-                    resultado:
-                      id: "resultado-124"
-                      descricao: "HIV"
-                      unidadeMedida: null
-                      unidadeMedidaPadrao: null
-                      unidadeMedidaPDF: null
-                      divergenciaUnidade: false
-                      valor: "não reagente"
-                      resultadoNumerico: null
-                      resultadoTexto: "não reagente"
-                      referenciaMin: null
-                      referenciaMax: null
-                      referenciaTexto: "não reagente"
-                      valorReferenciaPDF: "{\"min\":null,\"max\":null,\"value\":\"não reagente\",\"sex\":null,\"age_min\":null,\"age_max\":null}"
+              examples:
+                revisao:
+                  summary: Exemplo de resposta da revisão com grupos, subgrupos e resultados
+                  value:
+                    id: "3e32642d-5c3c-45a8-b834-e8e4cb312609"
+                    tipoRevisao: "REVISAO_1"
+                    status: "AGUARDANDO_REVISAO"
+                    arquivoPdfUrl: "https://bucket-name.s3.amazonaws.com/viva-labs/exames/resultado.pdf"
+                    dataRealizacao: "2023-11-20T10:00:00.000Z"
+                    laboratorioDetectado: "Laboratório Modelo"
+                    mensagemErro: null
+                    observacao: "Observação geral do processamento."
+                    responsavel: "Operador Exemplo"
+                    unidade: "UBS Centro"
+                    paciente:
+                      id: "paciente-123"
+                      nome: "João da Silva"
+                      cpf: "12345678900"
+                      nascimento: "1990-01-01T00:00:00.000Z"
+                    gruposExames:
+                      - id: "grupo-hemograma"
+                        nome: "Hemograma Completo"
+                        subGrupos:
+                          - id: "subgrupo-serie-vermelha"
+                            nome: "Série Vermelha"
+                            exames:
+                              - id: "exame-hemoglobina"
+                                nome: "Hemoglobina"
+                                resultados:
+                                  - id: "res-hemoglobina"
+                                    inputResultado:
+                                      tipo: "numerico"
+                                      valor: "14.2"
+                                    unidadeMedida: "g/dL"
+                                    InputsValoresRefencia:
+                                      - tipo: "numerico"
+                                        label: "Min"
+                                        valor: "13.5"
+                                      - tipo: "numerico"
+                                        label: "Max"
+                                        valor: "17.5"
+                              - id: "exame-hematocrito"
+                                nome: "Hematócrito"
+                                resultados:
+                                  - id: "res-hematocrito"
+                                    inputResultado:
+                                      tipo: "numerico"
+                                      valor: "42.0"
+                                    unidadeMedida: "%"
+                                    InputsValoresRefencia:
+                                      - tipo: "numerico"
+                                        label: "Min"
+                                        valor: "38.0"
+                                      - tipo: "numerico"
+                                        label: "Max"
+                                        valor: "50.0"
+                              - id: "exame-eritrocitos"
+                                nome: "Eritrócitos"
+                                resultados:
+                                  - id: "res-eritrocitos"
+                                    inputResultado:
+                                      tipo: "numerico"
+                                      valor: "4.80"
+                                    unidadeMedida: "milhões/µL"
+                                    InputsValoresRefencia:
+                                      - tipo: "numerico"
+                                        label: "Min"
+                                        valor: "4.50"
+                                      - tipo: "numerico"
+                                        label: "Max"
+                                        valor: "6.00"
+                          - id: "subgrupo-serie-branca"
+                            nome: "Série Branca"
+                            exames:
+                              - id: "exame-leucocitos"
+                                nome: "Leucócitos"
+                                resultados:
+                                  - id: "res-leucocitos"
+                                    inputResultado:
+                                      tipo: "numerico"
+                                      valor: "7200"
+                                    unidadeMedida: "/µL"
+                                    InputsValoresRefencia:
+                                      - tipo: "numerico"
+                                        label: "Min"
+                                        valor: "4000"
+                                      - tipo: "numerico"
+                                        label: "Max"
+                                        valor: "11000"
+                              - id: "exame-neutrofilos"
+                                nome: "Neutrófilos"
+                                resultados:
+                                  - id: "res-neutrofilos"
+                                    inputResultado:
+                                      tipo: "numerico"
+                                      valor: "62.0"
+                                    unidadeMedida: "%"
+                                    InputsValoresRefencia:
+                                      - tipo: "numerico"
+                                        label: "Min"
+                                        valor: "45.0"
+                                      - tipo: "numerico"
+                                        label: "Max"
+                                        valor: "70.0"
+                        examesSemSubgrupos:
+                          - id: "exame-plaquetas"
+                            nome: "Plaquetas"
+                            resultados:
+                              - id: "res-plaquetas"
+                                inputResultado:
+                                  tipo: "numerico"
+                                  valor: "210000"
+                                unidadeMedida: "/µL"
+                                InputsValoresRefencia:
+                                  - tipo: "numerico"
+                                    label: "Min"
+                                    valor: "150000"
+                                  - tipo: "numerico"
+                                    label: "Max"
+                                    valor: "400000"
+                      - id: "grupo-bioquimica"
+                        nome: "Bioquímica"
+                        subGrupos:
+                          - id: "subgrupo-funcao-renal"
+                            nome: "Função Renal"
+                            exames:
+                              - id: "exame-creatinina"
+                                nome: "Creatinina"
+                                resultados:
+                                  - id: "res-creatinina"
+                                    inputResultado:
+                                      tipo: "numerico"
+                                      valor: "0.9"
+                                    unidadeMedida: "mg/dL"
+                                    InputsValoresRefencia:
+                                      - tipo: "numerico"
+                                        label: "Min"
+                                        valor: "0.7"
+                                      - tipo: "numerico"
+                                        label: "Max"
+                                        valor: "1.2"
+                              - id: "exame-ureia"
+                                nome: "Ureia"
+                                resultados:
+                                  - id: "res-ureia"
+                                    inputResultado:
+                                      tipo: "numerico"
+                                      valor: "38.0"
+                                    unidadeMedida: "mg/dL"
+                                    InputsValoresRefencia:
+                                      - tipo: "numerico"
+                                        label: "Min"
+                                        valor: "15.0"
+                                      - tipo: "numerico"
+                                        label: "Max"
+                                        valor: "45.0"
+                          - id: "subgrupo-funcao-hepatica"
+                            nome: "Função Hepática"
+                            exames:
+                              - id: "exame-tgo"
+                                nome: "TGO (AST)"
+                                resultados:
+                                  - id: "res-tgo"
+                                    inputResultado:
+                                      tipo: "numerico"
+                                      valor: "28.0"
+                                    unidadeMedida: "U/L"
+                                    InputsValoresRefencia:
+                                      - tipo: "numerico"
+                                        label: "Min"
+                                        valor: "10.0"
+                                      - tipo: "numerico"
+                                        label: "Max"
+                                        valor: "40.0"
+                              - id: "exame-tgp"
+                                nome: "TGP (ALT)"
+                                resultados:
+                                  - id: "res-tgp"
+                                    inputResultado:
+                                      tipo: "numerico"
+                                      valor: "52.0"
+                                    unidadeMedida: "U/L"
+                                    InputsValoresRefencia:
+                                      - tipo: "numerico"
+                                        label: "Min"
+                                        valor: "7.0"
+                                      - tipo: "numerico"
+                                        label: "Max"
+                                        valor: "41.0"
+                        examesSemSubgrupos:
+                          - id: "exame-glicose"
+                            nome: "Glicose em Jejum"
+                            resultados:
+                              - id: "res-glicose"
+                                inputResultado:
+                                  tipo: "numerico"
+                                  valor: "95.0"
+                                unidadeMedida: "mg/dL"
+                                InputsValoresRefencia:
+                                  - tipo: "numerico"
+                                    label: "Min"
+                                    valor: "70.0"
+                                  - tipo: "numerico"
+                                    label: "Max"
+                                    valor: "99.0"
+                      - id: "grupo-lipidograma"
+                        nome: "Lipidograma"
+                        subGrupos:
+                          - id: "subgrupo-colesterol"
+                            nome: "Colesterol"
+                            exames:
+                              - id: "exame-col-total"
+                                nome: "Colesterol Total"
+                                resultados:
+                                  - id: "res-col-total"
+                                    inputResultado:
+                                      tipo: "numerico"
+                                      valor: "198.0"
+                                    unidadeMedida: "mg/dL"
+                                    InputsValoresRefencia:
+                                      - tipo: "texto"
+                                        label: "Referência"
+                                        valor: "< 200"
+                              - id: "exame-hdl"
+                                nome: "HDL Colesterol"
+                                resultados:
+                                  - id: "res-hdl"
+                                    inputResultado:
+                                      tipo: "numerico"
+                                      valor: "55.0"
+                                    unidadeMedida: "mg/dL"
+                                    InputsValoresRefencia:
+                                      - tipo: "texto"
+                                        label: "Referência"
+                                        valor: "> 40"
+                                  - id: "res-hdl-2"
+                                    inputResultado:
+                                      tipo: "texto"
+                                      valor: "reagente"
+                                    unidadeMedida: "U/L"
+                                    InputsValoresRefencia:
+                                      - tipo: "texto"
+                                        label: "Referência"
+                                        valor: "não reagente"
+                              - id: "exame-ldl"
+                                nome: "LDL Colesterol"
+                                resultados:
+                                  - id: "res-ldl"
+                                    inputResultado:
+                                      tipo: "numerico"
+                                      valor: "125.0"
+                                    unidadeMedida: "mg/dL"
+                                    InputsValoresRefencia:
+                                      - tipo: "texto"
+                                        label: "Referência"
+                                        valor: "< 130"
+                        examesSemSubgrupos:
+                          - id: "exame-triglicerideos"
+                            nome: "Triglicerídeos"
+                            resultados:
+                              - id: "res-triglicerideos"
+                                inputResultado:
+                                  tipo: "numerico"
+                                  valor: "145.0"
+                                unidadeMedida: "mg/dL"
+                                InputsValoresRefencia:
+                                  - tipo: "texto"
+                                    label: "Referência"
+                                    valor: "< 150"
         '400':
-          description: O processamento não está aguardando revisão.
+          description: O processamento não está em `AGUARDANDO_REVISAO`.
           content:
             application/json:
               example:
@@ -274,7 +672,11 @@ paths:
                   path: "/exames/processamentos/id/revisao"
                   method: "GET"
         '404':
-          description: Processamento não encontrado.
+          description: |
+            Recurso não encontrado. Pode retornar três mensagens distintas:
+            - `"Processamento não encontrado."` — o processamentoId não existe ou não pertence ao usuário.
+            - `"Usuário responsável não encontrado."` — o usuário do token não existe na base.
+            - `"Estabelecimento não encontrado."` — o estabelecimento selecionado no token não existe na base.
           content:
             application/json:
               example:
@@ -285,12 +687,25 @@ paths:
                   path: "/exames/processamentos/id/revisao"
                   method: "GET"
 
-  /exames/processamentos/{processamentoId}/finalizar-revisao:
+  /exames/processamentos/{processamentoId}/finalizar-revisao-1:
     post:
       tags:
         - Revisão IA
-      summary: Finalizar edição/revisão
-      description: Finaliza a revisão de um único `VivaLabsProcessamento`, identificado pelo `processamentoId` da rota. O body pode conter vários exames, mas todos devem pertencer a esse mesmo processamento. Cada exame aceita no máximo um `resultado` editável. A `observacao`, quando informada, é geral do `VivaLabsProcessamento` e fica fora da lista de `exames`.
+      summary: Confirmar revisão e salvar correções dos resultados
+      description: |
+        Conclui um processamento do tipo `REVISAO_1`, persistindo as correções feitas pelo operador sobre os resultados extraídos pela IA.
+        Após a confirmação, o processamento transiciona para `CONCLUIDO`.
+
+        **Campos opcionais do processamento:**
+        - `laboratorioDetectado`: corrige o nome do laboratório detectado pela IA. Só é atualizado se for enviado no body.
+        - `dataRealizacao`: corrige a data do exame (formato ISO-8601). Só é atualizado se for enviado no body.
+
+        **Edição de resultado por tipo:**
+        - Numérico: enviar `valor` como string (ex: `"15.22"`). Para ajustar a referência, incluir `referenciaMin` e/ou `referenciaMax`.
+        - Textual: enviar `valor` como texto livre (ex: `"não reagente"`). Para ajustar a referência, incluir `referenciaTexto`.
+        - Sem edição de referência: omitir os campos de referência — o backend mantém o valor já persistido.
+        - Limpeza de referência: enviar os três campos de referência como `null` — o backend remove a referência existente.
+        - Sem edição de resultado: enviar `resultado: null` — o exame é concluído sem atualizar o resultado.
       parameters:
         - name: processamentoId
           in: path
@@ -302,7 +717,6 @@ paths:
         content:
           application/json:
             example:
-              observacao: "Processamento revisado manualmente antes da conclusão."
               exames:
                 - id: "b098c0d6-22f8-4bab-84c1-510e920d4df7"
                   resultado:
@@ -321,20 +735,27 @@ paths:
                 - id: "66b9c0b7-e59d-4d68-b0f0-9e18918ff220"
                   resultado:
                     id: "caa2d0d2-f02f-49be-b461-0d0c24476c5f"
-                    valor: "87"
-                    referenciaMin: "80"
-                    referenciaMax: "100"
-                    referenciaTexto: null
+                    valor: "não reagente"
+                    referenciaMin: null
+                    referenciaMax: null
+                    referenciaTexto: "não reagente"
+                - id: "d7c0d2f1-f02f-49be-b461-0d0c24476aaa"
+                  resultado: null
       responses:
         '200':
-          description: Resultados persistidos e validados pela operação com sucesso.
+          description: Correções persistidas. O processamento transicionou para `CONCLUIDO`.
           content:
             application/json:
               example:
                 processamentoId: "a1b2c3d4-e5f6-7a8b-9c0d-e1f2a3b4c5d6"
                 status: "CONCLUIDO"
         '400':
-          description: O processamento precisa estar como aguardando revisão.
+          description: |
+            Regra de negócio violada. Pode retornar quatro mensagens distintas:
+            - `"Somente processamentos aguardando revisão podem ser finalizados."` — o processamento não está em `AGUARDANDO_REVISAO`.
+            - `"Este processamento não pertence ao fluxo de revisão 1."` — o `tipoRevisao` do processamento é `REVISAO_2`.
+            - `"Exame informado na revisão não pertence ao processamento."` — um `id` de exame no body não está vinculado a este processamento.
+            - `"Resultado informado na revisão não pertence ao processamento."` — o `resultado.id` não pertence ao exame informado.
           content:
             application/json:
               example:
@@ -342,10 +763,10 @@ paths:
                   message: "Somente processamentos aguardando revisão podem ser finalizados."
                   status: 400
                   timestamp: "2023-11-20T10:00:00.000Z"
-                  path: "/exames/processamentos/id/finalizar-revisao"
+                  path: "/exames/processamentos/id/finalizar-revisao-1"
                   method: "POST"
         '404':
-          description: Processamento não foi encontrado.
+          description: Processamento não encontrado.
           content:
             application/json:
               example:
@@ -353,5 +774,68 @@ paths:
                   message: "Processamento não encontrado."
                   status: 404
                   timestamp: "2023-11-20T10:00:00.000Z"
-                  path: "/exames/processamentos/id/finalizar-revisao"
+                  path: "/exames/processamentos/id/finalizar-revisao-1"
+                  method: "POST"
+
+  /exames/processamentos/{processamentoId}/finalizar-revisao-2:
+    post:
+      tags:
+        - Revisão IA
+      summary: Confirmar revisão e salvar observação do laudo
+      description: |
+        Conclui um processamento do tipo `REVISAO_2`, persistindo a observação inserida pelo operador.
+        Após a confirmação, o processamento transiciona para `CONCLUIDO`.
+
+        Não há edição de resultados tabelados nessa rota. Para corrigir `valor`, `referenciaMin`, `referenciaMax` ou `referenciaTexto`, use a rota `finalizar-revisao-1`.
+
+        **Campos opcionais:**
+        - `observacao`: texto livre com o laudo revisado. Só é atualizada se for enviada no body. Se vier como `null` ou vazio, a observação é limpa.
+        - `laboratorioDetectado`: corrige o nome do laboratório detectado pela IA. Só é atualizado se for enviado no body.
+        - `dataRealizacao`: corrige a data do exame (formato ISO-8601). Só é atualizada se for enviada no body.
+
+        Retorna `400` se o processamento for do tipo `REVISAO_1` ou não estiver em `AGUARDANDO_REVISAO`.
+      parameters:
+        - name: processamentoId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            example:
+              observacao: "Laudo revisado manualmente."
+      responses:
+        '200':
+          description: Observação persistida. O processamento transicionou para `CONCLUIDO`.
+          content:
+            application/json:
+              example:
+                processamentoId: "a1b2c3d4-e5f6-7a8b-9c0d-e1f2a3b4c5d6"
+                status: "CONCLUIDO"
+        '400':
+          description: |
+            Regra de negócio violada. Pode retornar duas mensagens distintas:
+            - `"Somente processamentos aguardando revisão podem ser finalizados."` — o processamento não está em `AGUARDANDO_REVISAO`.
+            - `"Este processamento não pertence ao fluxo de revisão 2."` — o `tipoRevisao` do processamento é `REVISAO_1`.
+          content:
+            application/json:
+              example:
+                error:
+                  message: "Este processamento não pertence ao fluxo de revisão 2."
+                  status: 400
+                  timestamp: "2023-11-20T10:00:00.000Z"
+                  path: "/exames/processamentos/id/finalizar-revisao-2"
+                  method: "POST"
+        '404':
+          description: Processamento não encontrado.
+          content:
+            application/json:
+              example:
+                error:
+                  message: "Processamento não encontrado."
+                  status: 404
+                  timestamp: "2023-11-20T10:00:00.000Z"
+                  path: "/exames/processamentos/id/finalizar-revisao-2"
                   method: "POST"
