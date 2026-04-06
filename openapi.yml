@@ -365,6 +365,10 @@ paths:
       description: |
         Retorna os dados do processamento prontos para revisão humana, já organizados para consumo da tela.
 
+        Quando `tipoRevisao = REVISAO_1`, o retorno inclui `gruposExames`, `subGrupos`, `examesSemSubgrupos` e `resultados`.
+
+        Quando `tipoRevisao = REVISAO_2`, o retorno não possui resultados estruturados; nesse caso, os campos relevantes são `nomeExame`, `observacao` e os metadados do processamento.
+
         A IA fornece principalmente:
         - `exam_date`, que é refletido em `dataRealizacao`
         - `laboratory_name`, que é refletido em `laboratorioDetectado`
@@ -392,8 +396,8 @@ paths:
           content:
             application/json:
               examples:
-                revisao:
-                  summary: Exemplo de resposta da revisão com grupos, subgrupos e resultados
+                revisao1:
+                  summary: REVISAO_1 com resultados estruturados
                   value:
                     id: "3e32642d-5c3c-45a8-b834-e8e4cb312609"
                     tipoRevisao: "REVISAO_1"
@@ -660,6 +664,25 @@ paths:
                                   - tipo: "texto"
                                     label: "Referência"
                                     valor: "< 150"
+                revisao2:
+                  summary: REVISAO_2 sem resultados estruturados
+                  value:
+                    id: "9f1a2b3c-4d5e-6f7a-8b9c-0d1e2f3a4b5c"
+                    tipoRevisao: "REVISAO_2"
+                    status: "AGUARDANDO_REVISAO"
+                    arquivoPdfUrl: "https://bucket-name.s3.amazonaws.com/viva-labs/exames/laudo.pdf"
+                    dataRealizacao: "2023-11-20T10:00:00.000Z"
+                    laboratorioDetectado: "Clínica de Imagem ABC"
+                    mensagemErro: null
+                    observacao: "Laudo descritivo extraído pela IA."
+                    responsavel: "Operador Exemplo"
+                    unidade: "UBS Centro"
+                    paciente:
+                      id: "paciente-123"
+                      nome: "João da Silva"
+                      cpf: "12345678900"
+                      nascimento: "1990-01-01T00:00:00.000Z"
+                    nomeExame: "Ultrassonografia de Abdome Total"
         '400':
           description: O processamento não está em `AGUARDANDO_REVISAO`.
           content:
