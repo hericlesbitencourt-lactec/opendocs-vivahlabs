@@ -5,6 +5,58 @@ info:
   description: |
     Documentação das rotas de ações de processamentos (VivaLabs) de unificação de exames e fluxos de revisão IA.
 paths:
+  /exames/processamentos:
+    get:
+      tags:
+        - Ações do processamento
+      summary: Listar processamentos do estabelecimento
+      description: |
+        Retorna a fila de processamentos do estabelecimento selecionado no token.
+
+        O campo `suportaInterpretacaoPorIA` serve para a aplicação decidir qual fluxo de revisão abrir:
+        - `true`: enviar o usuário para a tela de `REVISAO_1`
+        - `false`: enviar o usuário para a tela de `REVISAO_2`
+
+        Esse campo é calculado a partir dos itens do processamento e indica se o conjunto suporta interpretação estruturada por IA.
+      parameters:
+        - name: status
+          in: query
+          required: false
+          description: Filtra a fila por status do processamento.
+          schema:
+            type: string
+            enum:
+              - PROCESSANDO
+              - AGUARDANDO_REVISAO
+              - ERRO
+      responses:
+        '200':
+          description: Fila de processamentos retornada com sucesso.
+          content:
+            application/json:
+              example:
+                processamentos:
+                  - id: "3e32642d-5c3c-45a8-b834-e8e4cb312609"
+                    paciente:
+                      id: "paciente-123"
+                      nome: "João da Silva"
+                      cpf: "12345678900"
+                    exames: "Hemograma Completo + Glicose em Jejum"
+                    status: "AGUARDANDO_REVISAO"
+                    createdAt: "2023-11-20T10:00:00.000Z"
+                    suportaInterpretacaoPorIA: true
+                    mensagemErro: null
+                  - id: "8aa18d6d-8514-4316-958c-11b0ab944d25"
+                    paciente:
+                      id: "paciente-456"
+                      nome: "Maria Oliveira"
+                      cpf: "98765432100"
+                    exames: "Ultrassonografia de Abdome Total"
+                    status: "AGUARDANDO_REVISAO"
+                    createdAt: "2023-11-21T09:30:00.000Z"
+                    suportaInterpretacaoPorIA: false
+                    mensagemErro: null
+
   /exames/processamentos/{processamentoId}/alterar-arquivo:
     post:
       tags:
@@ -49,7 +101,7 @@ paths:
                   path: "/exames/processamentos/id/alterar-arquivo"
                   method: "POST"
         '404':
-          description: Processamento não encontrado para o usuário atual.
+          description: Processamento não encontrado para o estabelecimento atual.
           content:
             application/json:
               example:
@@ -372,7 +424,7 @@ paths:
         A IA fornece principalmente:
         - `exam_date`, que é refletido em `dataRealizacao`
         - `laboratory_name`, que é refletido em `laboratorioDetectado`
-        - os resultados extraídos por exame/campo/valor, que são convertidos pelo backend em `resultados`, `inputResultado` e `InputsValoresRefencia`
+        - os resultados extraídos por exame/campo/valor, que são convertidos pelo backend em `resultados`, `inputResultado` e `InputsValoresReferencia`
 
         O agrupamento final em `gruposExames`, `subGrupos` e `examesSemSubgrupos` é montado pelo backend com base no catálogo de exames e nos resultados persistidos do processamento.
 
@@ -382,7 +434,7 @@ paths:
         - `examesSemSubgrupos`: exames do grupo que não pertencem a um subgrupo
         - `resultados`: lista de resultados extraídos para cada exame
         - `inputResultado.tipo`: pode ser `numerico` ou `texto`
-        - `InputsValoresRefencia`: referências extraídas pela IA, preservando o tipo e o rótulo exibido na revisão
+        - `InputsValoresReferencia`: referências extraídas pela IA, preservando o tipo e o rótulo exibido na revisão
       parameters:
         - name: processamentoId
           in: path
@@ -429,7 +481,7 @@ paths:
                                       tipo: "numerico"
                                       valor: "14.2"
                                     unidadeMedida: "g/dL"
-                                    InputsValoresRefencia:
+                                    InputsValoresReferencia:
                                       - tipo: "numerico"
                                         label: "Min"
                                         valor: "13.5"
@@ -444,7 +496,7 @@ paths:
                                       tipo: "numerico"
                                       valor: "42.0"
                                     unidadeMedida: "%"
-                                    InputsValoresRefencia:
+                                    InputsValoresReferencia:
                                       - tipo: "numerico"
                                         label: "Min"
                                         valor: "38.0"
@@ -459,7 +511,7 @@ paths:
                                       tipo: "numerico"
                                       valor: "4.80"
                                     unidadeMedida: "milhões/µL"
-                                    InputsValoresRefencia:
+                                    InputsValoresReferencia:
                                       - tipo: "numerico"
                                         label: "Min"
                                         valor: "4.50"
@@ -477,7 +529,7 @@ paths:
                                       tipo: "numerico"
                                       valor: "7200"
                                     unidadeMedida: "/µL"
-                                    InputsValoresRefencia:
+                                    InputsValoresReferencia:
                                       - tipo: "numerico"
                                         label: "Min"
                                         valor: "4000"
@@ -492,7 +544,7 @@ paths:
                                       tipo: "numerico"
                                       valor: "62.0"
                                     unidadeMedida: "%"
-                                    InputsValoresRefencia:
+                                    InputsValoresReferencia:
                                       - tipo: "numerico"
                                         label: "Min"
                                         valor: "45.0"
@@ -508,7 +560,7 @@ paths:
                                   tipo: "numerico"
                                   valor: "210000"
                                 unidadeMedida: "/µL"
-                                InputsValoresRefencia:
+                                InputsValoresReferencia:
                                   - tipo: "numerico"
                                     label: "Min"
                                     valor: "150000"
@@ -529,7 +581,7 @@ paths:
                                       tipo: "numerico"
                                       valor: "0.9"
                                     unidadeMedida: "mg/dL"
-                                    InputsValoresRefencia:
+                                    InputsValoresReferencia:
                                       - tipo: "numerico"
                                         label: "Min"
                                         valor: "0.7"
@@ -544,7 +596,7 @@ paths:
                                       tipo: "numerico"
                                       valor: "38.0"
                                     unidadeMedida: "mg/dL"
-                                    InputsValoresRefencia:
+                                    InputsValoresReferencia:
                                       - tipo: "numerico"
                                         label: "Min"
                                         valor: "15.0"
@@ -562,7 +614,7 @@ paths:
                                       tipo: "numerico"
                                       valor: "28.0"
                                     unidadeMedida: "U/L"
-                                    InputsValoresRefencia:
+                                    InputsValoresReferencia:
                                       - tipo: "numerico"
                                         label: "Min"
                                         valor: "10.0"
@@ -577,7 +629,7 @@ paths:
                                       tipo: "numerico"
                                       valor: "52.0"
                                     unidadeMedida: "U/L"
-                                    InputsValoresRefencia:
+                                    InputsValoresReferencia:
                                       - tipo: "numerico"
                                         label: "Min"
                                         valor: "7.0"
@@ -593,7 +645,7 @@ paths:
                                   tipo: "numerico"
                                   valor: "95.0"
                                 unidadeMedida: "mg/dL"
-                                InputsValoresRefencia:
+                                InputsValoresReferencia:
                                   - tipo: "numerico"
                                     label: "Min"
                                     valor: "70.0"
@@ -614,7 +666,7 @@ paths:
                                       tipo: "numerico"
                                       valor: "198.0"
                                     unidadeMedida: "mg/dL"
-                                    InputsValoresRefencia:
+                                    InputsValoresReferencia:
                                       - tipo: "texto"
                                         label: "Referência"
                                         valor: "< 200"
@@ -626,7 +678,7 @@ paths:
                                       tipo: "numerico"
                                       valor: "55.0"
                                     unidadeMedida: "mg/dL"
-                                    InputsValoresRefencia:
+                                    InputsValoresReferencia:
                                       - tipo: "texto"
                                         label: "Referência"
                                         valor: "> 40"
@@ -635,7 +687,7 @@ paths:
                                       tipo: "texto"
                                       valor: "reagente"
                                     unidadeMedida: "U/L"
-                                    InputsValoresRefencia:
+                                    InputsValoresReferencia:
                                       - tipo: "texto"
                                         label: "Referência"
                                         valor: "não reagente"
@@ -647,7 +699,7 @@ paths:
                                       tipo: "numerico"
                                       valor: "125.0"
                                     unidadeMedida: "mg/dL"
-                                    InputsValoresRefencia:
+                                    InputsValoresReferencia:
                                       - tipo: "texto"
                                         label: "Referência"
                                         valor: "< 130"
@@ -660,7 +712,7 @@ paths:
                                   tipo: "numerico"
                                   valor: "145.0"
                                 unidadeMedida: "mg/dL"
-                                InputsValoresRefencia:
+                                InputsValoresReferencia:
                                   - tipo: "texto"
                                     label: "Referência"
                                     valor: "< 150"
@@ -697,8 +749,7 @@ paths:
         '404':
           description: |
             Recurso não encontrado. Pode retornar três mensagens distintas:
-            - `"Processamento não encontrado."` — o processamentoId não existe ou não pertence ao usuário.
-            - `"Usuário responsável não encontrado."` — o usuário do token não existe na base.
+            - `"Processamento não encontrado."` — o processamentoId não existe ou não pertence ao estabelecimento selecionado.
             - `"Estabelecimento não encontrado."` — o estabelecimento selecionado no token não existe na base.
           content:
             application/json:
