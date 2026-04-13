@@ -16,6 +16,7 @@ paths:
         A resposta é dividida em:
         - `examesNaoUnificados`: exames elegíveis para unificação e ainda sem grupo.
         - `examesUnificados`: grupos de unificação já montados, aguardando upload de PDF.
+        - `arquivoPdfUrl`: quando presente, retorna a key/path interna do arquivo no storage (sem `https://`).
 
         Cada exame informa `leituraIaHabilitada`, usado pela aplicação para saber se o conjunto pode seguir no fluxo com interpretação estruturada por IA.
       parameters:
@@ -803,6 +804,7 @@ paths:
         - `gruposExames`: lista de grupos de exames do processamento
         - `subGrupos`: subdivisão opcional dentro de cada grupo
         - `examesSemSubgrupos`: exames do grupo que não pertencem a um subgrupo
+        - `arquivoPdfUrl`: key/path interna do arquivo no storage (sem `https://`)
         - `resultados`: lista de resultados extraídos para cada exame
         - se a IA não retornar valor para algum parâmetro, o backend devolve o input vazio (placeholder) para preenchimento manual
         - `inputResultado.tipo`: pode ser `numerico` ou `texto`
@@ -827,7 +829,7 @@ paths:
                     id: "3e32642d-5c3c-45a8-b834-e8e4cb312609"
                     tipoRevisao: "REVISAO_1"
                     status: "AGUARDANDO_REVISAO"
-                    arquivoPdfUrl: "https://bucket-name.s3.amazonaws.com/viva-labs/exames/resultado.pdf"
+                    arquivoPdfUrl: "pacientes/viva-labs/paciente-123/processamentos/3e32642d-5c3c-45a8-b834-e8e4cb312609/1713123456789_resultado.pdf"
                     dataRealizacao: "2023-11-20T10:00:00.000Z"
                     laboratorioDetectado: "Laboratório Modelo"
                     mensagemErro: null
@@ -1098,7 +1100,7 @@ paths:
                     id: "9f1a2b3c-4d5e-6f7a-8b9c-0d1e2f3a4b5c"
                     tipoRevisao: "REVISAO_2"
                     status: "AGUARDANDO_REVISAO"
-                    arquivoPdfUrl: "https://bucket-name.s3.amazonaws.com/viva-labs/exames/laudo.pdf"
+                    arquivoPdfUrl: "pacientes/viva-labs/paciente-123/processamentos/9f1a2b3c-4d5e-6f7a-8b9c-0d1e2f3a4b5c/1713123467890_laudo.pdf"
                     dataRealizacao: "2023-11-20T10:00:00.000Z"
                     laboratorioDetectado: "Clínica de Imagem ABC"
                     mensagemErro: null
