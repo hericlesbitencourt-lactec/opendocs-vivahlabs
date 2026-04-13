@@ -5,6 +5,285 @@ info:
   description: |
     Documentação das rotas de ações de processamentos (VivaLabs) de unificação de exames e fluxos de revisão IA.
 paths:
+  /exames/unificacoes/pacientes/{pacienteId}:
+    get:
+      tags:
+        - Unificação de exames
+      summary: Buscar resumo de unificação por paciente
+      description: |
+        Retorna o resumo da unificação de exames do paciente.
+
+        A resposta é dividida em:
+        - `examesNaoUnificados`: exames elegíveis para unificação e ainda sem grupo.
+        - `examesUnificados`: grupos de unificação já montados, aguardando upload de PDF.
+
+        Cada exame informa `leituraIaHabilitada`, usado pela aplicação para saber se o conjunto pode seguir no fluxo com interpretação estruturada por IA.
+      parameters:
+        - name: pacienteId
+          in: path
+          required: true
+          description: ID do paciente
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Resumo de unificação retornado com sucesso.
+          content:
+            application/json:
+              example:
+                examesNaoUnificados:
+                  - id: "4e908988-17a6-4f49-96c0-7198d30a2013"
+                    pedidoExameId: "f3d1aaf9-e964-4dd0-a8aa-8a929d9d104d"
+                    nome: "Hemograma Completo"
+                    tipo: "LABORATORIAL"
+                    leituraIaHabilitada: true
+                    consultaId: "8a2b1148-f5a1-4549-8ed0-5992fc6b10c4"
+                    dataSolicitacao: "2026-04-10T10:00:00.000Z"
+                  - id: "2d3f645a-c587-478f-a09f-71ef10048bc6"
+                    pedidoExameId: "8cb473a0-3cae-4f14-998d-b4f5d5f1e4f0"
+                    nome: "Ultrassonografia de Abdome Total"
+                    tipo: "IMAGEM"
+                    leituraIaHabilitada: false
+                    consultaId: "8a2b1148-f5a1-4549-8ed0-5992fc6b10c4"
+                    dataSolicitacao: "2026-04-10T10:00:00.000Z"
+                examesUnificados:
+                  - id: "dc2f4db2-7750-4f7a-bb90-97de104c0d67"
+                    codigoGrupo: 1
+                    status: "PENDENTE_UPLOAD"
+                    arquivoPdfUrl: null
+                    mensagemErro: null
+                    exames:
+                      - id: "c98f2f53-99ea-4734-8070-cd6ebc66f6bc"
+                        pedidoExameId: "bf811ea2-2cb3-4a3d-a70c-cf5c47a1d7dd"
+                        nome: "Glicose em Jejum"
+                        tipo: "LABORATORIAL"
+                        leituraIaHabilitada: true
+                        consultaId: "8a2b1148-f5a1-4549-8ed0-5992fc6b10c4"
+                        dataSolicitacao: "2026-04-10T10:00:00.000Z"
+                      - id: "7f7b1777-d9b8-4d89-973f-4677671ec8ab"
+                        pedidoExameId: "754df56c-93d1-4076-8eb8-c08c2be57c15"
+                        nome: "Colesterol Total"
+                        tipo: "LABORATORIAL"
+                        leituraIaHabilitada: true
+                        consultaId: "8a2b1148-f5a1-4549-8ed0-5992fc6b10c4"
+                        dataSolicitacao: "2026-04-10T10:00:00.000Z"
+        '404':
+          description: Paciente não encontrado.
+          content:
+            application/json:
+              example:
+                error:
+                  message: "Paciente não encontrado."
+                  status: 404
+                  timestamp: "2026-04-13T10:00:00.000Z"
+                  path: "/exames/unificacoes/pacientes/id"
+                  method: "GET"
+        '422':
+          description: "Parâmetro inválido (ex.: `pacienteId` fora de formato UUID)."
+          content:
+            application/json:
+              example:
+                error:
+                  message: "Erro na validação dos parâmetros: ID do paciente inválido"
+                  status: 422
+                  timestamp: "2026-04-13T10:00:00.000Z"
+                  path: "/exames/unificacoes/pacientes/id"
+                  method: "GET"
+
+  /exames/unificacoes:
+    post:
+      tags:
+        - Unificação de exames
+      summary: Unificar exames e/ou grupos de um paciente
+      description: |
+        Cria ou atualiza grupos de unificação com base em exames não unificados (`exameIds`) e grupos existentes (`grupoIds`).
+
+        Regras de negócio principais:
+        - É obrigatório enviar ao menos um item em `exameIds` ou `grupoIds`.
+        - Se houver apenas exames individuais, é necessário selecionar pelo menos 2 para criar um novo grupo.
+        - Não é permitido misturar tipos de exame laboratoriais com imagem/outros no mesmo grupo.
+        - Não é permitido misturar exames com leitura por IA habilitada e exames sem leitura por IA no mesmo grupo.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - pacienteId
+              properties:
+                pacienteId:
+                  type: string
+                  format: uuid
+                exameIds:
+                  type: array
+                  description: IDs de exames não unificados a incluir.
+                  default: []
+                  items:
+                    type: string
+                    format: uuid
+                grupoIds:
+                  type: array
+                  description: IDs de grupos de unificação a mesclar/incluir.
+                  default: []
+                  items:
+                    type: string
+                    format: uuid
+            examples:
+              apenasExames:
+                summary: Criar grupo novo a partir de exames não unificados
+                value:
+                  pacienteId: "9b2d29b6-c8df-4f8b-8b84-c2b51fb1fd5d"
+                  exameIds:
+                    - "4e908988-17a6-4f49-96c0-7198d30a2013"
+                    - "c98f2f53-99ea-4734-8070-cd6ebc66f6bc"
+              examesEGrupo:
+                summary: Incluir exame em grupo já existente
+                value:
+                  pacienteId: "9b2d29b6-c8df-4f8b-8b84-c2b51fb1fd5d"
+                  exameIds:
+                    - "7f7b1777-d9b8-4d89-973f-4677671ec8ab"
+                  grupoIds:
+                    - "dc2f4db2-7750-4f7a-bb90-97de104c0d67"
+      responses:
+        '200':
+          description: Unificação concluída e resumo atualizado retornado.
+          content:
+            application/json:
+              example:
+                examesNaoUnificados:
+                  - id: "2d3f645a-c587-478f-a09f-71ef10048bc6"
+                    pedidoExameId: "8cb473a0-3cae-4f14-998d-b4f5d5f1e4f0"
+                    nome: "Ultrassonografia de Abdome Total"
+                    tipo: "IMAGEM"
+                    leituraIaHabilitada: false
+                    consultaId: "8a2b1148-f5a1-4549-8ed0-5992fc6b10c4"
+                    dataSolicitacao: "2026-04-10T10:00:00.000Z"
+                examesUnificados:
+                  - id: "dc2f4db2-7750-4f7a-bb90-97de104c0d67"
+                    codigoGrupo: 1
+                    status: "PENDENTE_UPLOAD"
+                    arquivoPdfUrl: null
+                    mensagemErro: null
+                    exames:
+                      - id: "4e908988-17a6-4f49-96c0-7198d30a2013"
+                        pedidoExameId: "f3d1aaf9-e964-4dd0-a8aa-8a929d9d104d"
+                        nome: "Hemograma Completo"
+                        tipo: "LABORATORIAL"
+                        leituraIaHabilitada: true
+                        consultaId: "8a2b1148-f5a1-4549-8ed0-5992fc6b10c4"
+                        dataSolicitacao: "2026-04-10T10:00:00.000Z"
+                      - id: "c98f2f53-99ea-4734-8070-cd6ebc66f6bc"
+                        pedidoExameId: "bf811ea2-2cb3-4a3d-a70c-cf5c47a1d7dd"
+                        nome: "Glicose em Jejum"
+                        tipo: "LABORATORIAL"
+                        leituraIaHabilitada: true
+                        consultaId: "8a2b1148-f5a1-4549-8ed0-5992fc6b10c4"
+                        dataSolicitacao: "2026-04-10T10:00:00.000Z"
+        '400':
+          description: |
+            Regra de negócio da unificação não atendida. Exemplos de mensagens:
+            - `"Selecione pelo menos 2 exames não unificados para criar um grupo."`
+            - `"Não é possível unificar exames de laboratório com exames de imagens ou do tipo outros."`
+            - `"Não é possível unificar exames que a IA lê com exames que a IA não lê."`
+          content:
+            application/json:
+              example:
+                error:
+                  message: "Não é possível unificar exames de laboratório com exames de imagens ou do tipo outros."
+                  status: 400
+                  timestamp: "2026-04-13T10:00:00.000Z"
+                  path: "/exames/unificacoes"
+                  method: "POST"
+        '404':
+          description: Paciente não encontrado.
+          content:
+            application/json:
+              example:
+                error:
+                  message: "Paciente não encontrado."
+                  status: 404
+                  timestamp: "2026-04-13T10:00:00.000Z"
+                  path: "/exames/unificacoes"
+                  method: "POST"
+        '422':
+          description: |
+            Erro de validação do payload (UUIDs inválidos ou nenhum item selecionado).
+            Exemplo de mensagem:
+            - `"Erro na validação: É necessário selecionar ao menos um exame não unificado ou um grupo."`
+          content:
+            application/json:
+              example:
+                error:
+                  message: "Erro na validação: É necessário selecionar ao menos um exame não unificado ou um grupo."
+                  status: 422
+                  timestamp: "2026-04-13T10:00:00.000Z"
+                  path: "/exames/unificacoes"
+                  method: "POST"
+
+  /exames/unificacoes/{grupoId}:
+    delete:
+      tags:
+        - Unificação de exames
+      summary: Cancelar grupo de unificação
+      description: |
+        Remove o grupo de unificação informado, desvinculando seus exames para voltarem à lista de não unificados.
+
+        Após o cancelamento, a API retorna o resumo atualizado do paciente.
+      parameters:
+        - name: grupoId
+          in: path
+          required: true
+          description: ID do grupo de unificação
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Grupo cancelado e resumo atualizado retornado.
+          content:
+            application/json:
+              example:
+                examesNaoUnificados:
+                  - id: "4e908988-17a6-4f49-96c0-7198d30a2013"
+                    pedidoExameId: "f3d1aaf9-e964-4dd0-a8aa-8a929d9d104d"
+                    nome: "Hemograma Completo"
+                    tipo: "LABORATORIAL"
+                    leituraIaHabilitada: true
+                    consultaId: "8a2b1148-f5a1-4549-8ed0-5992fc6b10c4"
+                    dataSolicitacao: "2026-04-10T10:00:00.000Z"
+                  - id: "c98f2f53-99ea-4734-8070-cd6ebc66f6bc"
+                    pedidoExameId: "bf811ea2-2cb3-4a3d-a70c-cf5c47a1d7dd"
+                    nome: "Glicose em Jejum"
+                    tipo: "LABORATORIAL"
+                    leituraIaHabilitada: true
+                    consultaId: "8a2b1148-f5a1-4549-8ed0-5992fc6b10c4"
+                    dataSolicitacao: "2026-04-10T10:00:00.000Z"
+                examesUnificados: []
+        '404':
+          description: Grupo de unificação não encontrado.
+          content:
+            application/json:
+              example:
+                error:
+                  message: "Grupo de unificação não encontrado."
+                  status: 404
+                  timestamp: "2026-04-13T10:00:00.000Z"
+                  path: "/exames/unificacoes/id"
+                  method: "DELETE"
+        '422':
+          description: "Parâmetro inválido (ex.: `grupoId` fora de formato UUID)."
+          content:
+            application/json:
+              example:
+                error:
+                  message: "Erro na validação dos parâmetros: ID do grupo inválido"
+                  status: 422
+                  timestamp: "2026-04-13T10:00:00.000Z"
+                  path: "/exames/unificacoes/id"
+                  method: "DELETE"
+
   /exames/processamentos:
     get:
       tags:
@@ -282,14 +561,15 @@ paths:
         A requisição deve ser enviada no formato `multipart/form-data`, com os campos organizados assim:
         - `pacienteId` — ID do paciente
         - `anexos[0][exameId]` ou `anexos[0][grupoId]` ou `anexos[0][avulso]` — identifica a qual exame o arquivo pertence
-        - `anexos[0][tipoAvulso]`, `anexos[0][nomeExame]`, `anexos[0][catalogoExameIds]`, `anexos[0][arquivo]` — detalhes do arquivo
+        - `anexos[0][tipoAvulso]`, `anexos[0][nomeExame]`, `anexos[0][extrairPorIA]`, `anexos[0][catalogoExameIds]`, `anexos[0][arquivo]` — detalhes do arquivo
         - `anexos[1][...]` e assim por diante, para múltiplos arquivos
 
         **Como preencher cada arquivo (anexo):**
-        - **Exame avulso laboratorial com IA**: enviar `avulso: "true"`, `tipoAvulso: "LABORATORIAL"`, `catalogoExameIds` e `arquivo`.
-          - Com `catalogoExameIds` preenchido, o backend envia para IA e o status inicial vai para `PROCESSANDO`.
+        - **Exame avulso laboratorial com IA**: enviar `avulso: "true"`, `tipoAvulso: "LABORATORIAL"`, `nomeExame`, `extrairPorIA: true`, `catalogoExameIds` e `arquivo`.
+          - Com `extrairPorIA: true`, o backend envia para IA e o status inicial vai para `PROCESSANDO`.
         - **Exame avulso sem IA** (qualquer tipo, inclusive laboratorial): enviar `avulso: "true"`, `tipoAvulso`, `nomeExame` e `arquivo`.
-          - Sem `catalogoExameIds`, não chama IA e o status vai direto para `AGUARDANDO_REVISAO`.
+          - Quando `extrairPorIA` for `false` (ou ausente), não chama IA e o status vai direto para `AGUARDANDO_REVISAO`.
+        - Em anexos avulsos, `nomeExame` é obrigatório.
         - **Vinculado a um pedido de exame**: enviar `exameId` e `arquivo`.
         - **Vinculado a um grupo de unificação já existente**: enviar `grupoId` e `arquivo`.
         - Para exames não avulsos, é obrigatório informar exatamente um destino: `exameId` ou `grupoId` (não os dois).
@@ -334,9 +614,13 @@ paths:
                           - OUTROS
                       nomeExame:
                         type: string
+                        description: Obrigatório para anexos avulsos (com ou sem IA).
+                      extrairPorIA:
+                        type: boolean
+                        description: Habilita envio para IA apenas em anexos avulsos laboratoriais. Quando `false` (ou ausente), `catalogoExameIds` é ignorado.
                       catalogoExameIds:
                         type: array
-                        description: Permitido apenas para avulso laboratorial. Quando informado, deve conter ao menos 1 ID de exame de catálogo com suporte à IA.
+                        description: Permitido apenas para avulso laboratorial. Só é considerado quando `extrairPorIA=true` e deve conter ao menos 1 ID de exame de catálogo com suporte à IA.
                         items:
                           type: string
                           format: uuid
@@ -359,6 +643,7 @@ paths:
                   anexos:
                     - avulso: "true"
                       tipoAvulso: "LABORATORIAL"
+                      extrairPorIA: false
                       nomeExame: "Vitamina D"
                       arquivo: "(binary)"
               avulsoLaboratorialComIa:
@@ -368,6 +653,8 @@ paths:
                   anexos:
                     - avulso: "true"
                       tipoAvulso: "LABORATORIAL"
+                      extrairPorIA: true
+                      nomeExame: "Hemograma Completo"
                       catalogoExameIds:
                         - "e8f8c5c8-b8d6-4bc1-9fb4-6d43f2faef0d"
                         - "75e6bca2-f274-4ca5-a7a2-f0d53ce32ab3"
@@ -422,7 +709,9 @@ paths:
             - `"O arquivo do anexo 1 não foi enviado na requisição."` — o campo `arquivo` de um dos itens está faltando (o número indica a posição do anexo, começando em 1).
             - `"Apenas arquivos PDF são permitidos!"` — foi enviado um arquivo que não é PDF.
             - `"Os exames do catálogo só podem ser informados em anexos avulsos do tipo laboratorial."` — uso indevido do campo `catalogoExameIds`.
-            - `"Informe ao menos um exame do catálogo."` — `catalogoExameIds` foi enviado vazio.
+            - `"Informe os exames do catálogo quando a extração de dados pela IA estiver habilitada."` — `extrairPorIA` foi habilitado sem `catalogoExameIds`.
+            - `"A extração de dados pela IA só pode ser habilitada em anexos avulsos do tipo laboratorial."` — uso indevido do campo `extrairPorIA`.
+            - `"Informe ao menos um exame do catálogo para extração por IA."` — `catalogoExameIds` foi enviado vazio com `extrairPorIA=true`.
             - `"Um ou mais exames selecionados não são do tipo laboratorial ou não têm suporte à interpretação por IA."` — IDs inválidos para fluxo com IA.
           content:
             application/json:
