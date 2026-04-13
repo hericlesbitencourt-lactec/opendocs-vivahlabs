@@ -273,20 +273,23 @@ paths:
     post:
       tags:
         - Ações do processamento
-      summary: Enviar PDFs de exames para análise pela IA
+      summary: Enviar PDFs de exames para processamento (com ou sem IA)
       description: |
-        Recebe os arquivos PDF dos exames do paciente e os envia para leitura e análise automática pela inteligência artificial.
+        Recebe os arquivos PDF dos exames do paciente e cria/processa os itens de revisão.
 
         Para cada arquivo enviado, o sistema verifica se já existe um processamento em andamento para aquele exame e o reaproveita quando possível. Caso contrário, um novo processamento é criado automaticamente.
 
         A requisição deve ser enviada no formato `multipart/form-data`, com os campos organizados assim:
         - `pacienteId` — ID do paciente
         - `anexos[0][exameId]` ou `anexos[0][grupoId]` ou `anexos[0][avulso]` — identifica a qual exame o arquivo pertence
-        - `anexos[0][tipoAvulso]`, `anexos[0][nomeExame]`, `anexos[0][arquivo]` — detalhes do arquivo
+        - `anexos[0][tipoAvulso]`, `anexos[0][nomeExame]`, `anexos[0][catalogoExameIds]`, `anexos[0][arquivo]` — detalhes do arquivo
         - `anexos[1][...]` e assim por diante, para múltiplos arquivos
 
         **Como preencher cada arquivo (anexo):**
-        - **Exame avulso** (não vinculado a nenhum pedido): enviar `avulso: "true"`, `tipoAvulso`, `nomeExame` e `arquivo`.
+        - **Exame avulso laboratorial com IA**: enviar `avulso: "true"`, `tipoAvulso: "LABORATORIAL"`, `catalogoExameIds` e `arquivo`.
+          - Com `catalogoExameIds` preenchido, o backend envia para IA e o status inicial vai para `PROCESSANDO`.
+        - **Exame avulso sem IA** (qualquer tipo, inclusive laboratorial): enviar `avulso: "true"`, `tipoAvulso`, `nomeExame` e `arquivo`.
+          - Sem `catalogoExameIds`, não chama IA e o status vai direto para `AGUARDANDO_REVISAO`.
         - **Vinculado a um pedido de exame**: enviar `exameId` e `arquivo`.
         - **Vinculado a um grupo de unificação já existente**: enviar `grupoId` e `arquivo`.
         - Para exames não avulsos, é obrigatório informar exatamente um destino: `exameId` ou `grupoId` (não os dois).
@@ -331,6 +334,12 @@ paths:
                           - OUTROS
                       nomeExame:
                         type: string
+                      catalogoExameIds:
+                        type: array
+                        description: Permitido apenas para avulso laboratorial. Quando informado, deve conter ao menos 1 ID de exame de catálogo com suporte à IA.
+                        items:
+                          type: string
+                          format: uuid
                       arquivo:
                         type: string
                         format: binary
@@ -344,7 +353,7 @@ paths:
                       nomeExame: "Hemograma Completo"
                       arquivo: "(binary)"
               avulso:
-                summary: Anexo avulso
+                summary: Anexo avulso sem IA
                 value:
                   pacienteId: "9b2d29b6-c8df-4f8b-8b84-c2b51fb1fd5d"
                   anexos:
@@ -352,22 +361,35 @@ paths:
                       tipoAvulso: "LABORATORIAL"
                       nomeExame: "Vitamina D"
                       arquivo: "(binary)"
+              avulsoLaboratorialComIa:
+                summary: Anexo avulso laboratorial com IA
+                value:
+                  pacienteId: "9b2d29b6-c8df-4f8b-8b84-c2b51fb1fd5d"
+                  anexos:
+                    - avulso: "true"
+                      tipoAvulso: "LABORATORIAL"
+                      catalogoExameIds:
+                        - "e8f8c5c8-b8d6-4bc1-9fb4-6d43f2faef0d"
+                        - "75e6bca2-f274-4ca5-a7a2-f0d53ce32ab3"
+                      arquivo: "(binary)"
       responses:
         '202':
-          description: Arquivos recebidos com sucesso. Cada item pode ter sido enviado para análise da IA normalmente ou registrado como falha individual — verifique os campos `processamentosEnviados` e `processamentosComFalha` na resposta.
+          description: Arquivos recebidos com sucesso. Cada item pode ter sido enviado para IA (`PROCESSANDO`), colocado direto em revisão (`AGUARDANDO_REVISAO`) ou registrado como falha individual.
           content:
             application/json:
               example:
                 processamentosEnviados:
                   - processamentoId: "a1b2c3d4-e5f6-7a8b-9c0d-e1f2a3b4c5d6"
                     status: "PROCESSANDO"
+                  - processamentoId: "c7c57d2a-6da1-4cf0-ab24-d8bd8c90f54f"
+                    status: "AGUARDANDO_REVISAO"
                 processamentosComFalha:
                   - processamentoId: "f6c1847b-fca9-4f4f-bfe9-919f86dd15f6"
                     motivo: "Não foi possível processar este exame no momento. Tente novamente mais tarde."
         '400':
           description: |
             Dados inválidos ou regra de negócio não atendida. Exemplos de mensagens retornadas:
-            - `"Exame {id} está associado a múltiplos processamentos. Selecione o grupo explicitamente para anexar o PDF."` — ocorre quando o exame pertence a mais de um grupo e o sistema não sabe a qual enviar.
+            - `"Este exame está associado a múltiplos processamentos. Selecione o grupo explicitamente para anexar o PDF."` — ocorre quando o exame pertence a mais de um grupo e o sistema não sabe a qual enviar.
             - `"Cada anexo deve ser avulso (com tipoAvulso) ou informar exatamente um alvo (exameId ou grupoId)."` — o item não foi identificado corretamente.
             - `"Nome do exame é obrigatório para exames avulsos."` — faltou informar o nome do exame avulso.
           content:
@@ -383,8 +405,8 @@ paths:
           description: |
             Paciente, exame ou grupo não encontrado. Exemplos de mensagens retornadas:
             - `"Paciente não encontrado."` — o `pacienteId` informado não existe no sistema.
-            - `"Grupo de unificação {id} não encontrado para o paciente."` — o grupo informado não pertence a esse paciente.
-            - `"Exame {id} não encontrado para o paciente."` — o pedido de exame informado não pertence a esse paciente.
+            - `"Grupo de exames não encontrado para o paciente informado."` — o grupo informado não pertence a esse paciente.
+            - `"Exame não encontrado para o paciente informado."` — o pedido de exame informado não pertence a esse paciente.
           content:
             application/json:
               example:
@@ -397,17 +419,76 @@ paths:
         '422':
           description: |
             Arquivo ausente ou em formato inválido. Exemplos de mensagens retornadas:
-            - `"Arquivo do anexo 0 ('anexos[0][arquivo]') não foi enviado na requisição."` — o campo `arquivo` de um dos itens está faltando.
+            - `"O arquivo do anexo 1 não foi enviado na requisição."` — o campo `arquivo` de um dos itens está faltando (o número indica a posição do anexo, começando em 1).
             - `"Apenas arquivos PDF são permitidos!"` — foi enviado um arquivo que não é PDF.
+            - `"Os exames do catálogo só podem ser informados em anexos avulsos do tipo laboratorial."` — uso indevido do campo `catalogoExameIds`.
+            - `"Informe ao menos um exame do catálogo."` — `catalogoExameIds` foi enviado vazio.
+            - `"Um ou mais exames selecionados não são do tipo laboratorial ou não têm suporte à interpretação por IA."` — IDs inválidos para fluxo com IA.
           content:
             application/json:
               example:
                 error:
-                  message: "Arquivo do anexo 0 ('anexos[0][arquivo]') não foi enviado na requisição."
+                  message: "O arquivo do anexo 1 não foi enviado na requisição."
                   status: 422
                   timestamp: "2023-11-20T10:00:00.000Z"
                   path: "/exames/processamentos/anexos"
                   method: "POST"
+
+  /exames/processamentos/resultado-ia:
+    post:
+      tags:
+        - Integração IA
+      summary: Callback da IA para persistir resultados extraídos
+      description: |
+        Endpoint de callback usado pela integração da IA após o processamento do PDF.
+
+        O callback aceita:
+        - `status: SUCESSO` com resultados estruturados em `resultados`
+        - `status: ERRO` com mensagem em `erro`
+
+        Em `SUCESSO`, além de `exams`, pode vir `unmapped_exam_names`, com nomes detectados no PDF fora dos exames enviados para extração estruturada.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            examples:
+              sucesso:
+                summary: Retorno com extração estruturada + nomes não mapeados
+                value:
+                  processamentoId: "a1b2c3d4-e5f6-7a8b-9c0d-e1f2a3b4c5d6"
+                  status: "SUCESSO"
+                  resultados:
+                    exam_date: "2026-04-09"
+                    laboratory_name: "Laboratório Exemplo"
+                    exams:
+                      - id: "e8f8c5c8-b8d6-4bc1-9fb4-6d43f2faef0d"
+                        type: "LABORATORIAL"
+                        categories:
+                          - name: "Bioquímica"
+                            fields: []
+                    unmapped_exam_names:
+                      - "Ferritina"
+                      - "Vitamina B12"
+              erro:
+                summary: Retorno de erro da IA
+                value:
+                  processamentoId: "a1b2c3d4-e5f6-7a8b-9c0d-e1f2a3b4c5d6"
+                  status: "ERRO"
+                  erro: "Falha ao extrair conteúdo do PDF."
+      responses:
+        '200':
+          description: Callback recebido e processado.
+          content:
+            application/json:
+              examples:
+                aguardandoRevisao:
+                  value:
+                    processamentoId: "a1b2c3d4-e5f6-7a8b-9c0d-e1f2a3b4c5d6"
+                    status: "AGUARDANDO_REVISAO"
+                erro:
+                  value:
+                    processamentoId: "a1b2c3d4-e5f6-7a8b-9c0d-e1f2a3b4c5d6"
+                    status: "ERRO"
   
   /exames/processamentos/{processamentoId}/revisao:
     get:
@@ -418,6 +499,7 @@ paths:
         Retorna os dados do processamento prontos para revisão humana, já organizados para consumo da tela.
 
         Quando `tipoRevisao = REVISAO_1`, o retorno inclui `gruposExames`, `subGrupos`, `examesSemSubgrupos` e `resultados`.
+        Também pode incluir `examesSomenteNomeDetectados`, que são nomes identificados no PDF sem extração estruturada.
 
         Quando `tipoRevisao = REVISAO_2`, o retorno não possui resultados estruturados; nesse caso, os campos relevantes são `nomeExame`, `observacao` e os metadados do processamento.
 
@@ -433,8 +515,10 @@ paths:
         - `subGrupos`: subdivisão opcional dentro de cada grupo
         - `examesSemSubgrupos`: exames do grupo que não pertencem a um subgrupo
         - `resultados`: lista de resultados extraídos para cada exame
+        - se a IA não retornar valor para algum parâmetro, o backend devolve o input vazio (placeholder) para preenchimento manual
         - `inputResultado.tipo`: pode ser `numerico` ou `texto`
         - `InputsValoresReferencia`: referências extraídas pela IA, preservando o tipo e o rótulo exibido na revisão
+        - `examesSomenteNomeDetectados`: nomes detectados pela IA fora da seleção de exames estruturados
       parameters:
         - name: processamentoId
           in: path
@@ -716,6 +800,9 @@ paths:
                                   - tipo: "texto"
                                     label: "Referência"
                                     valor: "< 150"
+                    examesSomenteNomeDetectados:
+                      - "Vitamina B12"
+                      - "Ferritina"
                 revisao2:
                   summary: REVISAO_2 sem resultados estruturados
                   value:
@@ -768,18 +855,24 @@ paths:
       summary: Confirmar revisão e salvar correções dos resultados
       description: |
         Conclui um processamento do tipo `REVISAO_1`, persistindo as correções feitas pelo operador sobre os resultados extraídos pela IA.
+        O processamento é considerado `REVISAO_1` quando ao menos um de seus itens tem suporte à interpretação por IA.
         Após a confirmação, o processamento transiciona para `CONCLUIDO`.
 
         **Campos opcionais do processamento:**
         - `laboratorioDetectado`: corrige o nome do laboratório detectado pela IA. Só é atualizado se for enviado no body.
         - `dataRealizacao`: corrige a data do exame (formato ISO-8601). Só é atualizado se for enviado no body.
 
-        **Edição de resultado por tipo:**
-        - Numérico: enviar `valor` como string (ex: `"15.22"`). Para ajustar a referência, incluir `referenciaMin` e/ou `referenciaMax`.
-        - Textual: enviar `valor` como texto livre (ex: `"não reagente"`). Para ajustar a referência, incluir `referenciaTexto`.
-        - Sem edição de referência: omitir os campos de referência — o backend mantém o valor já persistido.
-        - Limpeza de referência: enviar os três campos de referência como `null` — o backend remove a referência existente.
-        - Sem edição de resultado: enviar `resultado: null` — o exame é concluído sem atualizar o resultado.
+        **Edição por resultado (`resultado.id`):**
+        - O body usa `resultados[]` diretamente (não precisa enviar `exames[].id`).
+        - Cada item de `resultados` deve conter:
+          - `id`: id do `ResultadoExameItem`.
+          - `unidadeMedida` (opcional): se enviado, atualiza a unidade detectada no PDF.
+          - `valores[]`: pares `label` e `valor` para editar resultado e referência.
+        - Labels aceitas (exatas): `Resultado`, `Min`, `Max`, `Referência`.
+        - Para resultado numérico: usar `Resultado`, `Min` e `Max` (não usar `Referência`).
+        - Para resultado textual: usar `Resultado` e, quando necessário, `Referência`.
+        - Omitir uma label => não altera aquele campo.
+        - Enviar `valor: null` para uma label => limpa aquele campo.
       parameters:
         - name: processamentoId
           in: path
@@ -791,30 +884,33 @@ paths:
         content:
           application/json:
             example:
-              exames:
-                - id: "b098c0d6-22f8-4bab-84c1-510e920d4df7"
-                  resultado:
-                    id: "3dbac066-e018-4fd5-bcbc-38d1aec23f35"
-                    valor: "15.22"
-                    referenciaMin: "13.5"
-                    referenciaMax: "17.5"
-                    referenciaTexto: null
-                - id: "7b66b34f-72c3-4573-8e89-0bf2a155ac17"
-                  resultado:
-                    id: "a669011d-3137-49bc-a81d-73e27d4f1d72"
-                    valor: "42.73"
-                    referenciaMin: "41"
-                    referenciaMax: "53"
-                    referenciaTexto: null
-                - id: "66b9c0b7-e59d-4d68-b0f0-9e18918ff220"
-                  resultado:
-                    id: "caa2d0d2-f02f-49be-b461-0d0c24476c5f"
-                    valor: "não reagente"
-                    referenciaMin: null
-                    referenciaMax: null
-                    referenciaTexto: "não reagente"
-                - id: "d7c0d2f1-f02f-49be-b461-0d0c24476aaa"
-                  resultado: null
+              dataRealizacao: "2026-04-09T00:00:00.000Z"
+              laboratorioDetectado: "Laboratório Exemplo"
+              resultados:
+                - id: "resultado-hemoglobina-id"
+                  unidadeMedida: "g/dL"
+                  valores:
+                    - label: "Resultado"
+                      valor: "15.22"
+                    - label: "Min"
+                      valor: "13.5"
+                    - label: "Max"
+                      valor: "17.5"
+                - id: "resultado-hiv-id"
+                  unidadeMedida: null
+                  valores:
+                    - label: "Resultado"
+                      valor: "não reagente"
+                    - label: "Referência"
+                      valor: "não reagente"
+                - id: "resultado-creatinina-id"
+                  valores:
+                    - label: "Resultado"
+                      valor: null
+                    - label: "Min"
+                      valor: null
+                    - label: "Max"
+                      valor: null
       responses:
         '200':
           description: Correções persistidas. O processamento transicionou para `CONCLUIDO`.
@@ -825,17 +921,35 @@ paths:
                 status: "CONCLUIDO"
         '400':
           description: |
-            Regra de negócio violada. Pode retornar quatro mensagens distintas:
+            Regra de negócio violada. Pode retornar três mensagens distintas:
             - `"Somente processamentos aguardando revisão podem ser finalizados."` — o processamento não está em `AGUARDANDO_REVISAO`.
-            - `"Este processamento não pertence ao fluxo de revisão 1."` — o `tipoRevisao` do processamento é `REVISAO_2`.
-            - `"Exame informado na revisão não pertence ao processamento."` — um `id` de exame no body não está vinculado a este processamento.
-            - `"Resultado informado na revisão não pertence ao processamento."` — o `resultado.id` não pertence ao exame informado.
+            - `"Este processamento não requer revisão com interpretação de IA."` — o `tipoRevisao` calculado para este processamento é `REVISAO_2` (nenhum item possui suporte à IA).
+            - `"Um ou mais resultados informados não pertencem a este processamento."` — algum `resultado.id` não está vinculado a este processamento.
           content:
             application/json:
               example:
                 error:
                   message: "Somente processamentos aguardando revisão podem ser finalizados."
                   status: 400
+                  timestamp: "2023-11-20T10:00:00.000Z"
+                  path: "/exames/processamentos/id/finalizar-revisao-1"
+                  method: "POST"
+        '422':
+          description: |
+            Falha de validação do contrato de `valores[]`. Exemplos de mensagens retornadas:
+            - `"O campo \"XYZ\" não é reconhecido. Use \"Resultado\", \"Min\", \"Max\" ou \"Referência\"."` — label fora do conjunto permitido.
+            - `"O campo \"Resultado\" foi informado mais de uma vez no mesmo resultado."` — label duplicada.
+            - `"O campo \"Referência\" não pode ser usado em resultados numéricos. Use \"Min\" e \"Max\" para informar a faixa de referência."` — label incompatível com o tipo numérico.
+            - `"Os campos \"Min\" e \"Max\" não podem ser usados em resultados textuais. Use \"Referência\" para informar o valor de referência."` — label incompatível com o tipo textual.
+            - `"O valor informado para o resultado não é um número válido."` — valor não conversível para numérico.
+            - `"O valor informado para o campo \"Min\" não é um número válido."` — valor de referência Min inválido.
+            - `"O valor informado para o campo \"Max\" não é um número válido."` — valor de referência Max inválido.
+          content:
+            application/json:
+              example:
+                error:
+                  message: "O campo \"XYZ\" não é reconhecido. Use \"Resultado\", \"Min\", \"Max\" ou \"Referência\"."
+                  status: 422
                   timestamp: "2023-11-20T10:00:00.000Z"
                   path: "/exames/processamentos/id/finalizar-revisao-1"
                   method: "POST"
@@ -860,14 +974,14 @@ paths:
         Conclui um processamento do tipo `REVISAO_2`, persistindo a observação inserida pelo operador.
         Após a confirmação, o processamento transiciona para `CONCLUIDO`.
 
-        Não há edição de resultados tabelados nessa rota. Para corrigir `valor`, `referenciaMin`, `referenciaMax` ou `referenciaTexto`, use a rota `finalizar-revisao-1`.
+        Não há edição de resultados tabelados nessa rota. Para corrigir resultados e referências (`resultados[].valores[]`), use a rota `finalizar-revisao-1`.
 
         **Campos opcionais:**
         - `observacao`: texto livre com o laudo revisado. Só é atualizada se for enviada no body. Se vier como `null` ou vazio, a observação é limpa.
         - `laboratorioDetectado`: corrige o nome do laboratório detectado pela IA. Só é atualizado se for enviado no body.
         - `dataRealizacao`: corrige a data do exame (formato ISO-8601). Só é atualizada se for enviada no body.
 
-        Retorna `400` se o processamento for do tipo `REVISAO_1` ou não estiver em `AGUARDANDO_REVISAO`.
+        Retorna `400` se o processamento tiver ao menos um item com suporte à IA (fluxo `REVISAO_1`) ou não estiver em `AGUARDANDO_REVISAO`.
       parameters:
         - name: processamentoId
           in: path
@@ -892,12 +1006,12 @@ paths:
           description: |
             Regra de negócio violada. Pode retornar duas mensagens distintas:
             - `"Somente processamentos aguardando revisão podem ser finalizados."` — o processamento não está em `AGUARDANDO_REVISAO`.
-            - `"Este processamento não pertence ao fluxo de revisão 2."` — o `tipoRevisao` do processamento é `REVISAO_1`.
+            - `"Este processamento requer revisão com interpretação de IA, não revisão manual."` — o `tipoRevisao` calculado para este processamento é `REVISAO_1` (pelo menos um item possui suporte à IA).
           content:
             application/json:
               example:
                 error:
-                  message: "Este processamento não pertence ao fluxo de revisão 2."
+                  message: "Este processamento requer revisão com interpretação de IA, não revisão manual."
                   status: 400
                   timestamp: "2023-11-20T10:00:00.000Z"
                   path: "/exames/processamentos/id/finalizar-revisao-2"
